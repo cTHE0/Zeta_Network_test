@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeta2 - Réseau Social Décentralisé</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 Zeta2</h1>
+            <p class="subtitle">Réseau social décentralisé sur libp2p</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Section d'information -->
+            <div class="info-section">
+                <div class="card">
+                    <h2>📊 État du Réseau</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="label">Votre Peer ID:</span>
+                            <span class="value" id="local-peer-id">Chargement...</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Pairs connectés:</span>
+                            <span class="value" id="peer-count">0</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Posts totaux:</span>
+                            <span class="value" id="post-count">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Liste des pairs -->
+                <div class="card">
+                    <h2>👥 Pairs Connectés</h2>
+                    <div id="peers-list" class="peers-list">
+                        <p class="empty-state">Aucun pair connecté</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section principale -->
+            <div class="posts-section">
+                <!-- Formulaire de post -->
+                <div class="card post-form">
+                    <h2>✍️ Nouveau Post</h2>
+                    <form id="post-form">
+                        <div class="form-group">
+                            <input 
+                                type="text" 
+                                id="author" 
+                                placeholder="Votre nom" 
+                                required
+                                maxlength="50"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <textarea 
+                                id="content" 
+                                placeholder="Qu'est-ce qui se passe ?" 
+                                required
+                                maxlength="280"
+                                rows="3"
+                            ></textarea>
+                            <div class="char-count">
+                                <span id="char-count">0</span>/280
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary">
+                            📤 Publier
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Fil d'actualité -->
+                <div class="card">
+                    <h2>📰 Fil d'Actualité</h2>
+                    <div id="posts-feed" class="posts-feed">
+                        <p class="empty-state">Aucun post pour le moment</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
