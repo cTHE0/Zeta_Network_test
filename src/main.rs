@@ -278,6 +278,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::IncomingConnection { local_addr, send_back_addr, .. } => {
                     info!("📥 Connexion entrante: {} -> {}", send_back_addr, local_addr);
                 }
+                SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
+                    error!("❌ Erreur connexion sortante vers {:?}: {}", peer_id, error);
+                }
+                SwarmEvent::IncomingConnectionError { local_addr, send_back_addr, error, .. } => {
+                    error!("❌ Erreur connexion entrante de {} vers {}: {}", send_back_addr, local_addr, error);
+                }
+                SwarmEvent::Dialing { peer_id, .. } => {
+                    info!("📞 Tentative de connexion à: {:?}", peer_id);
+                }
                 _ => {}
             }
         }
