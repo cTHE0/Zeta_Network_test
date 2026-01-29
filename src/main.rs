@@ -11,6 +11,8 @@ use libp2p::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
@@ -99,8 +101,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         info!("⚠️  mDNS désactivé");
     }
 
-    // Générer les clés
-    let local_key = Keypair::generate_ed25519();
+    // Charger ou générer les clés (persistance pour garder le même Peer ID)
+    let key_file = "identity.key";
+    let local_key = if Path::new(key_file).exists() {
+        info!("🔐 Chargement des clés existantes...");
+        let key_bytes = fs::read(key_file)?;
+        Keypair::from_protobuf_encoding(&key_bytes)?
+    } else {
+        info!("🔑 Génération de nouvelles clés...");
+        let key = Keypair::generate_ed25519();
+        let key_bytes = key.to_protobuf_encoding()?;
+        fs::write(key_file, key_bytes)?;
+        info!("💾 Clés sauvegardées dans {}", key_file);
+        key
+    };
+    
     let local_peer_id = PeerId::from(local_key.public());
     info!("🔑 Peer ID: {}", local_peer_id);
 
