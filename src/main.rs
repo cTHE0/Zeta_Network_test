@@ -125,14 +125,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = SwarmBuilder::with_existing_identity(local_key.clone())
         .with_tokio()
         .with_tcp(
-            tcp::Config::default(),
+            tcp::Config::default().nodelay(true),
             noise::Config::new,
             yamux::Config::default,
         )?
         .with_behaviour(|key| {
             info!("📝 Configuration Gossipsub...");
             let gossipsub_config = gossipsub::ConfigBuilder::default()
-                .heartbeat_interval(Duration::from_secs(1))
+                .heartbeat_interval(Duration::from_secs(10))
                 .validation_mode(gossipsub::ValidationMode::Permissive)
                 .build()
                 .expect("Configuration Gossipsub valide");
@@ -150,7 +150,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let identify = identify::Behaviour::new(identify::Config::new(
                 "/zeta2/1.0.0".to_string(),
                 key.public(),
-            ));
+            ).with_push_listen_addr_updates(true));
 
             info!("📝 Configuration Kademlia...");
             let kad = kad::Behaviour::new(local_peer_id, MemoryStore::new(local_peer_id));
@@ -160,7 +160,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .expect("Impossible de créer mDNS");
 
             info!("📝 Configuration Ping...");
-            let ping = ping::Behaviour::new(ping::Config::new());
+            let ping = ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(15)));
 
             Ok(ZetaBehaviour {
                 gossipsub,
@@ -170,6 +170,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 kad,
             })
         })?
+        .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(60)))
         .build();
 
     info!("✅ Swarm créé avec succès");
@@ -237,8 +238,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("🎉 Zeta2 démarré! Interface web sur http://localhost:3030");
     info!("⏳ En attente des événements réseau...");
 
-    // Timer pour reconnexion automatique
-    let mut reconnect_interval = tokio::time::interval(Duration::from_secs(10));
+    // Timer pour reconnexion automatique (commence après 30s)
+    let mut reconnect_interval = tokio::time::interval(Duration::from_secs(30));
+    reconnect_interval.tick().await; // Consommer le premier tick immédiat
     let mut connected_to_relay = false;
 
     // Boucle événements
@@ -309,8 +311,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         network_state.add_peer(peer_id, addr.to_string()).await;
                     }
                 }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    info!("✅ Connexion: {}", peer_id);
+                SwarmEvent::ConnectionEstablished { peer_id, num_established, .. } => {
+                    info!("✅ Connexion: {} (total: {})", peer_id, num_established);
                     swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                     // Vérifier si c'est le relay
                     if Some(peer_id) == relay_peer_id {
@@ -318,13 +320,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         info!("🔗 Connecté au relay!");
                     }
                 }
-                SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                    info!("❌ Déconnexion: {}", peer_id);
-                    network_state.remove_peer(&peer_id).await;
-                    // Vérifier si c'est le relay
-                    if Some(peer_id) == relay_peer_id {
-                        connected_to_relay = false;
-                        info!("⚠️  Déconnecté du relay! Reconnexion dans 10s...");
+                SwarmEvent::ConnectionClosed { peer_id, num_established, cause, .. } => {
+                    info!("❌ Déconnexion: {} (restantes: {}) - Cause: {:?}", peer_id, num_established, cause);
+                    // Ne pas retirer le peer si d'autres connexions existent
+                    if num_established == 0 {
+                        network_state.remove_peer(&peer_id).await;
+                        // Vérifier si c'est le relay
+                        if Some(peer_id) == relay_peer_id {
+                            connected_to_relay = false;
+                            info!("⚠️  Déconnecté du relay! Reconnexion dans 10s...");
+                        }
                     }
                 }
                 SwarmEvent::IncomingConnection { local_addr, send_back_addr, .. } => {
