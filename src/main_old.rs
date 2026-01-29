@@ -16,6 +16,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{error, info};
 
+
 mod web_server;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,8 +68,9 @@ impl NetworkState {
 
     pub async fn add_post(&self, post: Post) {
         let mut posts = self.posts.write().await;
-        posts.insert(0, post);
+        posts.insert(0, post); // Insert au début pour avoir les posts récents en premier
         
+        // Limiter à 1000 posts en mémoire
         if posts.len() > 1000 {
             posts.truncate(1000);
         }
@@ -77,36 +79,25 @@ impl NetworkState {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    // Initialiser le logger avec format personnalisé
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .with_thread_ids(false)
-        .init();
+    // Initialiser le logger
+    tracing_subscriber::fmt::init();
 
     info!("🚀 Démarrage de Zeta2 - Réseau social décentralisé");
 
-    // Lire les arguments
+    // Lire les arguments de ligne de commande
     let args: Vec<String> = std::env::args().collect();
     let is_relay = args.contains(&"--relay".to_string());
-    let disable_mdns = args.contains(&"--no-mdns".to_string());
     let relay_addr: Option<String> = args.iter()
         .position(|x| x == "--relay-addr")
         .and_then(|i| args.get(i + 1))
         .cloned();
 
-    info!("⚙️  Mode: {}", if is_relay { "RELAY (Serveur)" } else { "CLIENT" });
-    if disable_mdns {
-        info!("⚠️  mDNS désactivé");
-    }
-
-    // Générer les clés
+    // Générer une paire de clés
     let local_key = Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    info!("🔑 Peer ID: {}", local_peer_id);
+    info!("🔑 Peer ID local: {}", local_peer_id);
 
-    info!("📝 Initialisation du swarm...");
-
-    // Créer le swarm
+    // Créer le swarm avec le nouveau builder pattern
     let mut swarm = SwarmBuilder::with_existing_identity(local_key.clone())
         .with_tokio()
         .with_tcp(
@@ -115,7 +106,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             yamux::Config::default,
         )?
         .with_behaviour(|key| {
-            info!("📝 Configuration Gossipsub...");
+            // Configuration Gossipsub
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .heartbeat_interval(Duration::from_secs(1))
                 .validation_mode(gossipsub::ValidationMode::Permissive)
@@ -126,25 +117,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 MessageAuthenticity::Signed(key.clone()),
                 gossipsub_config,
             )
-            .expect("Impossible de créer Gossipsub");
+            .expect("Impossible de créer le comportement Gossipsub");
 
+            // S'abonner au topic
             let topic = IdentTopic::new("zeta2-social");
             gossipsub.subscribe(&topic).unwrap();
 
-            info!("📝 Configuration Identify...");
+            // Configuration Identify
             let identify = identify::Behaviour::new(identify::Config::new(
                 "/zeta2/1.0.0".to_string(),
                 key.public(),
             ));
 
-            info!("📝 Configuration Kademlia...");
+            // Configuration Kademlia
             let kad = kad::Behaviour::new(local_peer_id, MemoryStore::new(local_peer_id));
 
-            info!("📝 Configuration mDNS...");
+            // Configuration mDNS
             let mdns = mdns::Behaviour::new(mdns::Config::default(), local_peer_id)
                 .expect("Impossible de créer mDNS");
 
-            info!("📝 Configuration Ping...");
+            // Ping
             let ping = ping::Behaviour::new(ping::Config::new());
 
             Ok(ZetaBehaviour {
@@ -157,34 +149,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
         })?
         .build();
 
-    info!("✅ Swarm créé avec succès");
+    // S'abonner au topic (déjà fait dans le builder mais on garde la référence)
     let topic = IdentTopic::new("zeta2-social");
     info!("📡 Abonné au topic: {}", topic);
 
-    // Configurer les listeners
-    info!("📝 Configuration des listeners...");
-    
+    // Écouter sur toutes les interfaces
     if is_relay {
-        info!("🖥️  Mode RELAY - Écoute sur 0.0.0.0:4001");
-        match swarm.listen_on("/ip4/0.0.0.0/tcp/4001".parse()?) {
-            Ok(_) => info!("✅ Listener TCP configuré"),
-            Err(e) => error!("❌ Erreur lors de l'ajout du listener: {}", e),
-        }
+        // Mode serveur relay - écouter sur un port public
+        swarm.listen_on("/ip4/0.0.0.0/tcp/4001".parse()?)?;
+        info!("🖥️  Mode RELAY activé - Écoute sur 0.0.0.0:4001");
     } else {
-        info!("💻 Mode CLIENT - Port aléatoire");
-        match swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?) {
-            Ok(_) => info!("✅ Listener TCP configuré"),
-            Err(e) => error!("❌ Erreur lors de l'ajout du listener: {}", e),
-        }
+        // Mode client - écouter sur un port aléatoire
+        swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+        info!("💻 Mode CLIENT activé");
 
+        // Se connecter au relay si fourni
         if let Some(addr) = relay_addr {
             match addr.parse::<Multiaddr>() {
                 Ok(relay_multiaddr) => {
                     info!("🔗 Connexion au relay: {}", relay_multiaddr);
-                    match swarm.dial(relay_multiaddr.clone()) {
-                        Ok(_) => info!("✅ Dial initié vers relay"),
-                        Err(e) => error!("❌ Erreur dial relay: {}", e),
-                    }
+                    swarm.dial(relay_multiaddr)?;
                 }
                 Err(e) => {
                     error!("❌ Adresse relay invalide: {}", e);
@@ -196,89 +180,87 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // État du réseau
     let network_state = NetworkState::new(local_peer_id);
 
-    // Channel pour les posts
+    // Channel pour communiquer entre le serveur web et le swarm
     let (post_tx, mut post_rx) = mpsc::unbounded_channel::<Post>();
 
     // Démarrer le serveur web
     let web_state = network_state.clone();
     tokio::spawn(async move {
         if let Err(e) = web_server::start_server(web_state, post_tx).await {
-            error!("❌ Erreur serveur web: {}", e);
+            error!("❌ Erreur du serveur web: {}", e);
         }
     });
-
-    info!("🎉 Zeta2 démarré! Interface web sur http://localhost:3030");
-    info!("⏳ En attente des événements réseau...");
 
     // Boucle événements
     loop {
         tokio::select! {
+            // Recevoir les posts du serveur web
             Some(post) = post_rx.recv() => {
                 let msg = NetworkMessage::Post(post);
                 if let Ok(json) = serde_json::to_vec(&msg) {
                     if let Err(e) = swarm.behaviour_mut().gossipsub.publish(topic.clone(), json) {
-                        error!("❌ Erreur publication: {}", e);
+                        error!("❌ Erreur lors de la publication: {}", e);
                     } else {
-                        info!("📤 Post publié");
+                        info!("📤 Post publié sur le réseau");
                     }
                 }
             }
+            // Événements du swarm
             event = swarm.select_next_some() => match event {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    info!("🎧 Écoute sur: {}/p2p/{}", address, local_peer_id);
-                }
-                SwarmEvent::Behaviour(ZetaBehaviourEvent::Gossipsub(
-                    gossipsub::Event::Message {
-                        propagation_source: _peer_id,
-                        message,
-                        ..
-                    },
-                )) => {
-                    if let Ok(msg) = serde_json::from_slice::<NetworkMessage>(&message.data) {
-                        match msg {
-                            NetworkMessage::Post(post) => {
-                                info!("📨 Nouveau post: {}", post.author);
-                                network_state.add_post(post).await;
-                            }
-                            NetworkMessage::Heartbeat => {}
+            SwarmEvent::NewListenAddr { address, .. } => {
+                info!("🎧 Écoute sur: {}/p2p/{}", address, local_peer_id);
+            }
+            SwarmEvent::Behaviour(ZetaBehaviourEvent::Gossipsub(
+                gossipsub::Event::Message {
+                    propagation_source: _peer_id,
+                    message,
+                    ..
+                },
+            )) => {
+                if let Ok(msg) = serde_json::from_slice::<NetworkMessage>(&message.data) {
+                    match msg {
+                        NetworkMessage::Post(post) => {
+                            info!("📨 Nouveau post de {}: {}", post.author, post.content);
+                            network_state.add_post(post).await;
+                        }
+                        NetworkMessage::Heartbeat => {
+                            // Heartbeat pour maintenir la connexion
                         }
                     }
                 }
-                SwarmEvent::Behaviour(ZetaBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
-                    for (peer_id, multiaddr) in list {
-                        info!("🔍 Peer découvert: {}", peer_id);
-                        swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
-                        network_state.add_peer(peer_id, multiaddr.to_string()).await;
-                    }
-                }
-                SwarmEvent::Behaviour(ZetaBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
-                    for (peer_id, _) in list {
-                        info!("⏰ Peer expiré: {}", peer_id);
-                        network_state.remove_peer(&peer_id).await;
-                    }
-                }
-                SwarmEvent::Behaviour(ZetaBehaviourEvent::Identify(identify::Event::Received {
-                    peer_id,
-                    info,
-                    ..
-                })) => {
-                    info!("🆔 Peer identifié: {}", peer_id);
-                    for addr in info.listen_addrs {
-                        network_state.add_peer(peer_id, addr.to_string()).await;
-                    }
-                }
-                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-                    info!("✅ Connexion: {}", peer_id);
+            }
+            SwarmEvent::Behaviour(ZetaBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+                for (peer_id, multiaddr) in list {
+                    info!("🔍 Peer découvert via mDNS: {} à {}", peer_id, multiaddr);
                     swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                    network_state.add_peer(peer_id, multiaddr.to_string()).await;
                 }
-                SwarmEvent::ConnectionClosed { peer_id, .. } => {
-                    info!("❌ Déconnexion: {}", peer_id);
+            }
+            SwarmEvent::Behaviour(ZetaBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
+                for (peer_id, multiaddr) in list {
+                    info!("⏰ Peer expiré: {} à {}", peer_id, multiaddr);
                     network_state.remove_peer(&peer_id).await;
                 }
-                SwarmEvent::IncomingConnection { local_addr, send_back_addr, .. } => {
-                    info!("📥 Connexion entrante: {} -> {}", send_back_addr, local_addr);
+            }
+            SwarmEvent::Behaviour(ZetaBehaviourEvent::Identify(identify::Event::Received {
+                peer_id,
+                info,
+                ..
+            })) => {
+                info!("🆔 Peer identifié: {}", peer_id);
+                for addr in info.listen_addrs {
+                    network_state.add_peer(peer_id, addr.to_string()).await;
                 }
-                _ => {}
+            }
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                info!("✅ Connexion établie avec: {}", peer_id);
+                swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+            }
+            SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                info!("❌ Connexion fermée avec: {}", peer_id);
+                network_state.remove_peer(&peer_id).await;
+            }
+            _ => {}
             }
         }
     }
