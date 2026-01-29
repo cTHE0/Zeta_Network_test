@@ -192,7 +192,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Err(e) => error!("❌ Erreur lors de l'ajout du listener: {}", e),
         }
 
-        if let Some(addr) = relay_addr {
+        if let Some(ref addr) = relay_addr {
             match addr.parse::<Multiaddr>() {
                 Ok(relay_multiaddr) => {
                     info!("🔗 Connexion au relay: {}", relay_multiaddr);
@@ -211,6 +211,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // État du réseau
     let network_state = NetworkState::new(local_peer_id);
 
+    // Sauvegarder l'adresse du relay pour reconnexion
+    let relay_multiaddr: Option<Multiaddr> = relay_addr.as_ref().and_then(|a| a.parse().ok());
+    let relay_peer_id: Option<PeerId> = relay_multiaddr.as_ref().and_then(|addr| {
+        addr.iter().find_map(|p| {
+            if let libp2p::multiaddr::Protocol::P2p(peer_id) = p {
+                Some(peer_id)
+            } else {
+                None
+            }
+        })
+    });
+
     // Channel pour les posts
     let (post_tx, mut post_rx) = mpsc::unbounded_channel::<Post>();
 
@@ -225,9 +237,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("🎉 Zeta2 démarré! Interface web sur http://localhost:3030");
     info!("⏳ En attente des événements réseau...");
 
+    // Timer pour reconnexion automatique
+    let mut reconnect_interval = tokio::time::interval(Duration::from_secs(10));
+    let mut connected_to_relay = false;
+
     // Boucle événements
     loop {
         tokio::select! {
+            // Timer de reconnexion
+            _ = reconnect_interval.tick() => {
+                if !connected_to_relay {
+                    if let Some(ref addr) = relay_multiaddr {
+                        info!("🔄 Tentative de reconnexion au relay...");
+                        if let Err(e) = swarm.dial(addr.clone()) {
+                            error!("❌ Échec reconnexion: {}", e);
+                        }
+                    }
+                }
+            }
             Some(post) = post_rx.recv() => {
                 let msg = NetworkMessage::Post(post);
                 if let Ok(json) = serde_json::to_vec(&msg) {
@@ -285,10 +312,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     info!("✅ Connexion: {}", peer_id);
                     swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                    // Vérifier si c'est le relay
+                    if Some(peer_id) == relay_peer_id {
+                        connected_to_relay = true;
+                        info!("🔗 Connecté au relay!");
+                    }
                 }
                 SwarmEvent::ConnectionClosed { peer_id, .. } => {
                     info!("❌ Déconnexion: {}", peer_id);
                     network_state.remove_peer(&peer_id).await;
+                    // Vérifier si c'est le relay
+                    if Some(peer_id) == relay_peer_id {
+                        connected_to_relay = false;
+                        info!("⚠️  Déconnecté du relay! Reconnexion dans 10s...");
+                    }
                 }
                 SwarmEvent::IncomingConnection { local_addr, send_back_addr, .. } => {
                     info!("📥 Connexion entrante: {} -> {}", send_back_addr, local_addr);
