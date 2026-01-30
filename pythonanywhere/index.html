@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zeta Network - Réseau Social Décentralisé P2P</title>
-    <meta name="description" content="Zeta Network - Un réseau social décentralisé basé sur libp2p. Aucune inscription, aucun serveur central, vos données vous appartiennent.">
+    <meta name="description" content="Zeta Network - Un réseau social décentralisé basé sur libp2p. Code Rust exécuté localement via WebAssembly.">
     
-    <!-- Styles intégrés pour PythonAnywhere -->
     <style>
         :root {
             --bg-primary: #15202b;
@@ -31,6 +30,68 @@
             min-height: 100vh;
         }
 
+        /* Loading Screen */
+        #loading-screen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        #loading-screen.hidden { display: none; }
+
+        .loading-logo {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .loading-title {
+            font-size: 2rem;
+            margin-bottom: 30px;
+        }
+
+        .loading-steps {
+            text-align: left;
+            max-width: 400px;
+        }
+
+        .loading-step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            color: var(--text-secondary);
+        }
+
+        .loading-step.active { color: var(--accent-color); }
+        .loading-step.done { color: var(--success-color); }
+        .loading-step.error { color: var(--error-color); }
+
+        .step-icon { width: 24px; text-align: center; }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            display: inline-block;
+            animation: spin 1s linear infinite;
+        }
+
+        /* Main App */
+        #app { display: none; }
+        #app.visible { display: block; }
+
         .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 
         header {
@@ -42,6 +103,17 @@
 
         header h1 { font-size: 2.5rem; margin-bottom: 10px; }
         .subtitle { color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 15px; }
+
+        .wasm-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+        }
 
         .connection-status {
             display: flex;
@@ -62,9 +134,6 @@
         .status-connected { background: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
         .status-disconnected { background: var(--error-color); }
         .status-connecting { background: #ffad1f; animation: pulse 1s infinite; }
-        .status-error { background: var(--error-color); }
-
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
         .main-content {
             display: grid;
@@ -113,14 +182,27 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            border-left: 3px solid var(--accent-color);
         }
 
         .peer-item .peer-icon { font-size: 1.5rem; }
-        .peer-item .peer-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .peer-item .peer-info { flex: 1; }
         .peer-item .peer-name { font-weight: 500; }
         .peer-item .peer-id { font-family: monospace; font-size: 0.75rem; color: var(--text-secondary); }
-        .peer-item.browser-peer { border-left: 3px solid var(--accent-color); }
-        .peer-item.native-peer { border-left: 3px solid var(--success-color); }
+
+        .relay-item {
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .relay-item.active { border-left: 3px solid var(--success-color); }
 
         .form-group { margin-bottom: 15px; }
 
@@ -211,6 +293,9 @@
             margin-top: 30px;
         }
 
+        footer a { color: var(--accent-color); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
             to { opacity: 1; transform: translateY(0); }
@@ -218,336 +303,424 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🌐 Zeta Network</h1>
-            <p class="subtitle">Réseau social décentralisé P2P - Powered by libp2p & Rust</p>
-            <div class="connection-status">
-                <span id="connection-indicator" class="status-indicator status-disconnected"></span>
-                <span id="connection-text">Connexion...</span>
+    <!-- Écran de chargement -->
+    <div id="loading-screen">
+        <div class="loading-logo">🌐</div>
+        <h1 class="loading-title">Zeta Network</h1>
+        <div class="loading-steps">
+            <div class="loading-step" id="step-wasm">
+                <span class="step-icon">⏳</span>
+                <span>Chargement du code Rust (WASM ~248KB)...</span>
             </div>
-        </header>
-
-        <div class="main-content">
-            <!-- Section d'information -->
-            <div class="info-section">
-                <div class="card">
-                    <h2>📊 Votre Connexion</h2>
-                    <div class="info-grid">
-                        <div class="info-item">
-                            <span class="label">Votre ID:</span>
-                            <span class="value" id="local-peer-id">En attente...</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="label">Nom:</span>
-                            <span class="value" id="local-name">-</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="label">Mode:</span>
-                            <span class="value" id="node-mode"><span class="badge">🌐 WebSocket</span></span>
-                        </div>
-                        <div class="info-item">
-                            <span class="label">Pairs connectés:</span>
-                            <span class="value" id="peer-count">0</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card">
-                    <h2>👥 Pairs sur le Réseau</h2>
-                    <div id="peers-list" class="peers-list">
-                        <p class="empty-state">Recherche de pairs...</p>
-                    </div>
-                </div>
+            <div class="loading-step" id="step-init">
+                <span class="step-icon">⏳</span>
+                <span>Génération de votre identité ed25519...</span>
             </div>
-
-            <!-- Section principale -->
-            <div class="posts-section">
-                <div class="card post-form">
-                    <h2>✍️ Publier un Message</h2>
-                    <form id="post-form">
-                        <div class="form-group">
-                            <input 
-                                type="text" 
-                                id="author" 
-                                placeholder="Votre nom (pseudo)" 
-                                required
-                                maxlength="50"
-                            >
-                        </div>
-                        <div class="form-group">
-                            <textarea 
-                                id="content" 
-                                placeholder="Qu'avez-vous à dire au monde ?" 
-                                required
-                                maxlength="280"
-                                rows="3"
-                            ></textarea>
-                            <div class="char-count">
-                                <span id="char-count">0</span>/280
-                            </div>
-                        </div>
-                        <button type="submit" class="btn-primary" id="submit-btn">
-                            📤 Publier sur le réseau P2P
-                        </button>
-                    </form>
-                </div>
-
-                <div class="card">
-                    <h2>📰 Fil d'Actualité <span id="post-count-badge" class="badge">0</span></h2>
-                    <div id="posts-feed" class="posts-feed">
-                        <p class="empty-state">Aucun message pour le moment. Soyez le premier !</p>
-                    </div>
-                </div>
+            <div class="loading-step" id="step-connect">
+                <span class="step-icon">⏳</span>
+                <span>Connexion aux relais P2P...</span>
+            </div>
+            <div class="loading-step" id="step-ready">
+                <span class="step-icon">⏳</span>
+                <span>Synchronisation avec le réseau...</span>
             </div>
         </div>
-
-        <footer>
-            <p>🦀 Backend Rust avec libp2p | 🔒 Décentralisé & Chiffré | 🌍 <a href="https://github.com/cTHE0/Zeta_Network_test" style="color: var(--accent-color);">Code source sur GitHub</a></p>
-        </footer>
     </div>
 
-    <!-- Configuration du relay -->
+    <!-- Application principale -->
+    <div id="app">
+        <div class="container">
+            <header>
+                <h1>🌐 Zeta Network</h1>
+                <p class="subtitle">Réseau social décentralisé P2P</p>
+                <div class="wasm-badge">
+                    <span>🦀</span>
+                    <span>Code Rust exécuté localement via WebAssembly</span>
+                </div>
+                <div class="connection-status">
+                    <span id="connection-indicator" class="status-indicator status-disconnected"></span>
+                    <span id="connection-text">Déconnecté</span>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <div class="info-section">
+                    <div class="card">
+                        <h2>📊 Votre Nœud</h2>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <span class="label">Votre Peer ID (ed25519):</span>
+                                <span class="value" id="local-peer-id">En attente...</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">Clé publique:</span>
+                                <span class="value" id="local-pubkey">-</span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">Mode:</span>
+                                <span class="value"><span class="badge">🦀 WASM + WebSocket</span></span>
+                            </div>
+                            <div class="info-item">
+                                <span class="label">Pairs connectés:</span>
+                                <span class="value" id="peer-count">0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2>📡 Relais Connus</h2>
+                        <div id="relays-list">
+                            <!-- Dynamiquement rempli -->
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2>👥 Pairs sur le Réseau <span id="peers-badge" class="badge">0</span></h2>
+                        <div id="peers-list" class="peers-list">
+                            <p class="empty-state">Recherche de pairs...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="posts-section">
+                    <div class="card">
+                        <h2>✍️ Publier un Message</h2>
+                        <form id="post-form">
+                            <div class="form-group">
+                                <input 
+                                    type="text" 
+                                    id="author" 
+                                    placeholder="Votre nom (pseudo)" 
+                                    required
+                                    maxlength="50"
+                                >
+                            </div>
+                            <div class="form-group">
+                                <textarea 
+                                    id="content" 
+                                    placeholder="Qu'avez-vous à dire au monde ?" 
+                                    required
+                                    maxlength="280"
+                                    rows="3"
+                                ></textarea>
+                                <div class="char-count">
+                                    <span id="char-count">0</span>/280
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary" id="submit-btn">
+                                📤 Publier sur le réseau P2P
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <h2>📰 Fil d'Actualité <span id="post-count-badge" class="badge">0</span></h2>
+                        <div id="posts-feed" class="posts-feed">
+                            <p class="empty-state">Aucun message pour le moment. Soyez le premier !</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <footer>
+                <p>🦀 Code Rust exécuté via WebAssembly | 🔐 Clés ed25519 générées localement | 🌍 <a href="https://github.com/cTHE0/Zeta_Network_test">Code source sur GitHub</a></p>
+                <p style="margin-top: 10px; font-size: 0.8rem;">Vos clés sont stockées dans votre navigateur. Aucun serveur central ne stocke vos données.</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Configuration des relais connus -->
     <script>
-        // ⚠️ MODIFIER CES VALEURS SELON VOTRE CONFIGURATION
-        window.RELAY_CONFIG = {
-            // Adresse WebSocket de votre relay (serveur avec le noeud P2P)
-            websocket: "ws://65.75.201.11:3030/ws",
-            // API REST du relay
-            api: "http://65.75.201.11:3030/api"
-        };
+        // =====================================================
+        // LISTE DES RELAIS P2P CONNUS
+        // Ces relais servent UNIQUEMENT à transmettre les messages
+        // Ils ne stockent pas vos données et ne peuvent pas lire vos messages
+        // =====================================================
+        window.KNOWN_RELAYS = [
+            {
+                name: "ServerCheap Primary",
+                ws: "ws://65.75.201.11:3030/ws",
+                api: "http://65.75.201.11:3030/api",
+                location: "USA",
+                p2p_port: 4001
+            }
+            // Ajoutez d'autres relais ici quand disponibles:
+            // { name: "Europe Relay", ws: "ws://eu.zetanet.org:3030/ws", api: "...", location: "EU" },
+            // { name: "Asia Relay", ws: "ws://asia.zetanet.org:3030/ws", api: "...", location: "Asia" },
+        ];
     </script>
 
-    <!-- Client JavaScript -->
-    <script>
-        // ============================================
-        // Zeta Network - Client WebSocket
-        // ============================================
+    <!-- Chargement du code Rust WASM -->
+    <script type="module">
+        // Import du module WASM compilé depuis Rust
+        import init, { 
+            init as wasmInit,
+            publish_post,
+            get_peers,
+            get_posts,
+            on_message,
+            on_peers_change,
+            on_status_change,
+            start_heartbeat,
+            get_peer_id,
+            get_public_key
+        } from './pkg/zeta_wasm.js';
 
-        let ws = null;
-        let myPeerId = null;
+        // État global
+        let wasmReady = false;
+        let currentRelay = null;
         let posts = [];
         let peers = [];
-        let reconnectAttempts = 0;
-        const MAX_RECONNECT_ATTEMPTS = 10;
-        const config = window.RELAY_CONFIG;
 
-        const elements = {};
+        // Éléments DOM
+        const $ = id => document.getElementById(id);
 
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('🚀 Zeta Network - Démarrage...');
-            console.log('📡 Relay:', config.websocket);
-            
-            elements.connectionIndicator = document.getElementById('connection-indicator');
-            elements.connectionText = document.getElementById('connection-text');
-            elements.localPeerId = document.getElementById('local-peer-id');
-            elements.localName = document.getElementById('local-name');
-            elements.nodeMode = document.getElementById('node-mode');
-            elements.peerCount = document.getElementById('peer-count');
-            elements.peersList = document.getElementById('peers-list');
-            elements.postsFeed = document.getElementById('posts-feed');
-            elements.postCountBadge = document.getElementById('post-count-badge');
-            elements.postForm = document.getElementById('post-form');
-            elements.authorInput = document.getElementById('author');
-            elements.contentInput = document.getElementById('content');
-            elements.charCount = document.getElementById('char-count');
-            elements.submitBtn = document.getElementById('submit-btn');
-
-            const savedUsername = localStorage.getItem('zeta_username');
-            if (savedUsername) elements.authorInput.value = savedUsername;
-
-            elements.postForm.addEventListener('submit', handleSubmit);
-            elements.contentInput.addEventListener('input', () => {
-                elements.charCount.textContent = elements.contentInput.value.length;
-            });
-
-            connectWebSocket();
-        });
-
-        function connectWebSocket() {
-            console.log('🔌 Connexion au relay:', config.websocket);
-            updateConnectionStatus('connecting');
-            
-            try {
-                ws = new WebSocket(config.websocket);
-                
-                ws.onopen = () => {
-                    console.log('✅ Connecté au réseau P2P');
-                    reconnectAttempts = 0;
-                    updateConnectionStatus('connected');
-                };
-                
-                ws.onmessage = (event) => {
-                    try {
-                        const data = JSON.parse(event.data);
-                        handleMessage(data);
-                    } catch (e) {
-                        console.error('Erreur parsing:', e);
-                    }
-                };
-                
-                ws.onclose = () => {
-                    console.log('❌ Déconnecté');
-                    updateConnectionStatus('disconnected');
-                    scheduleReconnect();
-                };
-                
-                ws.onerror = (error) => {
-                    console.error('Erreur WebSocket:', error);
-                    updateConnectionStatus('error');
-                };
-            } catch (e) {
-                console.error('Erreur:', e);
-                updateConnectionStatus('error');
-                scheduleReconnect();
+        // Mise à jour des étapes de chargement
+        function updateStep(stepId, status) {
+            const step = $(stepId);
+            step.className = `loading-step ${status}`;
+            const icons = { active: '🔄', done: '✅', error: '❌', pending: '⏳' };
+            step.querySelector('.step-icon').textContent = status === 'active' ? '🔄' : icons[status];
+            if (status === 'active') {
+                step.querySelector('.step-icon').classList.add('spinner');
+            } else {
+                step.querySelector('.step-icon').classList.remove('spinner');
             }
         }
 
-        function scheduleReconnect() {
-            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-                reconnectAttempts++;
-                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-                console.log(`🔄 Reconnexion dans ${delay/1000}s...`);
-                setTimeout(connectWebSocket, delay);
-            }
-        }
-
-        function handleMessage(data) {
-            console.log('📩', data.type);
-            
-            switch (data.type) {
-                case 'init':
-                    myPeerId = data.peer_id;
-                    peers = data.peers || [];
-                    posts = data.posts || [];
-                    updateUI();
-                    break;
-                    
-                case 'new_post':
-                case 'Post':
-                    const post = data.post || data.Post || data;
-                    if (post && post.id && !posts.find(p => p.id === post.id)) {
-                        posts.unshift(post);
-                        updatePostsFeed();
-                    }
-                    break;
-                    
-                case 'peer_joined':
-                case 'PeerJoined':
-                    break;
-                    
-                case 'peer_left':
-                case 'PeerLeft':
-                    const leftId = data.peer_id || data.PeerLeft?.peer_id;
-                    if (leftId) {
-                        peers = peers.filter(p => p.peer_id !== leftId);
-                        updatePeersList();
-                    }
-                    break;
-                    
-                case 'pong':
-                    break;
-            }
-        }
-
-        async function handleSubmit(e) {
-            e.preventDefault();
-            
-            const author = elements.authorInput.value.trim();
-            const content = elements.contentInput.value.trim();
-            
-            if (!author || !content) return;
-            
-            localStorage.setItem('zeta_username', author);
-            elements.submitBtn.disabled = true;
-            elements.submitBtn.textContent = '📤 Envoi...';
-            
-            try {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: 'post',
-                        content: content,
-                        author_name: author
-                    }));
-                    elements.contentInput.value = '';
-                    elements.charCount.textContent = '0';
-                }
-            } catch (error) {
-                alert('Erreur: ' + error.message);
-            } finally {
-                elements.submitBtn.disabled = false;
-                elements.submitBtn.textContent = '📤 Publier sur le réseau P2P';
-            }
-        }
-
-        function updateUI() {
-            if (myPeerId) {
-                elements.localPeerId.textContent = myPeerId.substring(0, 20) + '...';
-                elements.localPeerId.title = myPeerId;
-                elements.localName.textContent = `Browser-${myPeerId.substring(8, 16)}`;
-            }
-            updatePeersList();
-            updatePostsFeed();
-        }
-
-        function updatePeersList() {
-            elements.peerCount.textContent = peers.length;
-            
-            if (peers.length === 0) {
-                elements.peersList.innerHTML = '<p class="empty-state">Recherche de pairs...</p>';
-                return;
-            }
-            
-            elements.peersList.innerHTML = peers.map(peer => `
-                <div class="peer-item ${peer.is_browser ? 'browser-peer' : 'native-peer'}">
-                    <span class="peer-icon">${peer.is_browser ? '🌐' : '💻'}</span>
-                    <div class="peer-info">
-                        <span class="peer-name">${escapeHtml(peer.name || 'Anonyme')}</span>
-                        <span class="peer-id">${peer.peer_id.substring(0, 16)}...</span>
-                    </div>
+        // Afficher la liste des relais
+        function displayRelays() {
+            const container = $('relays-list');
+            container.innerHTML = window.KNOWN_RELAYS.map((relay, i) => `
+                <div class="relay-item ${currentRelay === i ? 'active' : ''}" id="relay-${i}">
+                    <span>${currentRelay === i ? '🟢' : '⚪'}</span>
+                    <span>${relay.name} (${relay.location})</span>
                 </div>
             `).join('');
         }
 
-        function updatePostsFeed() {
-            elements.postCountBadge.textContent = posts.length;
-            
-            if (posts.length === 0) {
-                elements.postsFeed.innerHTML = '<p class="empty-state">Aucun message. Soyez le premier !</p>';
-                return;
+        // Mise à jour de l'interface
+        function updateUI() {
+            // Peer ID et clé publique
+            try {
+                const peerId = get_peer_id();
+                const pubKey = get_public_key();
+                $('local-peer-id').textContent = peerId ? peerId.substring(0, 16) + '...' : 'N/A';
+                $('local-peer-id').title = peerId;
+                $('local-pubkey').textContent = pubKey ? pubKey.substring(0, 20) + '...' : 'N/A';
+                $('local-pubkey').title = pubKey;
+            } catch (e) {
+                console.warn('Peer info not available yet');
             }
+
+            // Pairs
+            $('peer-count').textContent = peers.length;
+            $('peers-badge').textContent = peers.length;
             
-            elements.postsFeed.innerHTML = posts.map(post => {
-                const date = new Date(post.timestamp * 1000);
-                const timeAgo = getTimeAgo(date);
-                const isLocal = post.author === myPeerId;
-                
-                return `
-                    <div class="post ${isLocal ? 'post-local' : ''}">
-                        <div class="post-header">
-                            <span class="post-author">${escapeHtml(post.author_name)}</span>
-                            <span class="post-time">${timeAgo}</span>
-                        </div>
-                        <div class="post-content">${escapeHtml(post.content)}</div>
-                        <div class="post-footer">
-                            <span>${isLocal ? '📍 Vous' : `🔗 ${post.author.substring(0, 12)}...`}</span>
+            if (peers.length === 0) {
+                $('peers-list').innerHTML = '<p class="empty-state">Recherche de pairs...</p>';
+            } else {
+                $('peers-list').innerHTML = peers.map(peer => `
+                    <div class="peer-item">
+                        <span class="peer-icon">👤</span>
+                        <div class="peer-info">
+                            <span class="peer-name">${escapeHtml(peer.name || 'Anonyme')}</span>
+                            <span class="peer-id">${peer.peer_id ? peer.peer_id.substring(0, 16) + '...' : 'N/A'}</span>
                         </div>
                     </div>
-                `;
-            }).join('');
+                `).join('');
+            }
+
+            // Posts
+            $('post-count-badge').textContent = posts.length;
+            
+            if (posts.length === 0) {
+                $('posts-feed').innerHTML = '<p class="empty-state">Aucun message. Soyez le premier !</p>';
+            } else {
+                $('posts-feed').innerHTML = posts.map(post => {
+                    const date = new Date(post.timestamp * 1000);
+                    const peerId = get_peer_id();
+                    const isLocal = post.author === peerId;
+                    
+                    return `
+                        <div class="post ${isLocal ? 'post-local' : ''}">
+                            <div class="post-header">
+                                <span class="post-author">${escapeHtml(post.author_name || 'Anonyme')}</span>
+                                <span class="post-time">${getTimeAgo(date)}</span>
+                            </div>
+                            <div class="post-content">${escapeHtml(post.content)}</div>
+                            <div class="post-footer">
+                                <span>${isLocal ? '📍 Vous' : '🔗 ' + (post.author ? post.author.substring(0, 12) + '...' : 'N/A')}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
         }
 
-        function updateConnectionStatus(status) {
-            elements.connectionIndicator.className = `status-indicator status-${status}`;
-            const texts = {
-                'connecting': '🔄 Connexion au relay...',
-                'connected': '✅ Connecté au réseau P2P',
-                'disconnected': '❌ Déconnecté',
-                'error': '⚠️ Erreur de connexion'
-            };
-            elements.connectionText.textContent = texts[status] || status;
+        // Callbacks du WASM
+        function setupCallbacks() {
+            // Nouveau message reçu
+            on_message((msg) => {
+                console.log('📩 Message reçu:', msg);
+                try {
+                    const data = typeof msg === 'string' ? JSON.parse(msg) : msg;
+                    if (data.type === 'init') {
+                        peers = data.peers || [];
+                        posts = data.posts || [];
+                        updateUI();
+                    } else if (data.type === 'new_post' || data.Post) {
+                        const post = data.post || data.Post || data;
+                        if (post && post.id && !posts.find(p => p.id === post.id)) {
+                            posts.unshift(post);
+                            updateUI();
+                        }
+                    }
+                } catch (e) {
+                    console.error('Erreur parsing message:', e);
+                }
+            });
+
+            // Changement de pairs
+            on_peers_change((newPeers) => {
+                console.log('👥 Pairs mis à jour:', newPeers);
+                peers = newPeers || [];
+                updateUI();
+            });
+
+            // Changement de statut
+            on_status_change((status) => {
+                console.log('📡 Statut:', status);
+                const indicator = $('connection-indicator');
+                const text = $('connection-text');
+                
+                if (status === 'connected') {
+                    indicator.className = 'status-indicator status-connected';
+                    text.textContent = '✅ Connecté au réseau P2P';
+                } else if (status === 'connecting') {
+                    indicator.className = 'status-indicator status-connecting';
+                    text.textContent = '🔄 Connexion...';
+                } else {
+                    indicator.className = 'status-indicator status-disconnected';
+                    text.textContent = '❌ Déconnecté';
+                }
+            });
         }
 
+        // Initialisation principale
+        async function main() {
+            console.log('🚀 Zeta Network - Démarrage avec WASM...');
+            console.log('📡 Relais connus:', window.KNOWN_RELAYS);
+            
+            displayRelays();
+            
+            try {
+                // Étape 1: Charger le WASM
+                updateStep('step-wasm', 'active');
+                console.log('📦 Chargement du module WASM...');
+                await init();
+                updateStep('step-wasm', 'done');
+                
+                // Étape 2: Initialiser l'identité
+                updateStep('step-init', 'active');
+                console.log('🔑 Génération de l\'identité ed25519...');
+                
+                // Sélectionner le premier relay disponible
+                const relay = window.KNOWN_RELAYS[0];
+                currentRelay = 0;
+                displayRelays();
+                
+                // Initialiser le WASM avec l'URL du relay
+                await wasmInit(relay.ws);
+                updateStep('step-init', 'done');
+                
+                // Étape 3: Configurer les callbacks et se connecter
+                updateStep('step-connect', 'active');
+                setupCallbacks();
+                updateStep('step-connect', 'done');
+                
+                // Étape 4: Démarrer le heartbeat
+                updateStep('step-ready', 'active');
+                start_heartbeat();
+                
+                // Charger les données initiales
+                try {
+                    posts = get_posts() || [];
+                    peers = get_peers() || [];
+                } catch (e) {
+                    console.warn('Initial data not available yet');
+                }
+                
+                updateStep('step-ready', 'done');
+                
+                // Afficher l'application
+                wasmReady = true;
+                $('loading-screen').classList.add('hidden');
+                $('app').classList.add('visible');
+                updateUI();
+                
+                console.log('✅ Zeta Network prêt!');
+                
+            } catch (error) {
+                console.error('❌ Erreur:', error);
+                updateStep('step-wasm', 'error');
+                updateStep('step-init', 'error');
+                updateStep('step-connect', 'error');
+                updateStep('step-ready', 'error');
+            }
+        }
+
+        // Gestion du formulaire
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = $('post-form');
+            const authorInput = $('author');
+            const contentInput = $('content');
+            const charCount = $('char-count');
+            const submitBtn = $('submit-btn');
+
+            // Restaurer le nom sauvegardé
+            const savedName = localStorage.getItem('zeta_username');
+            if (savedName) authorInput.value = savedName;
+
+            // Compteur de caractères
+            contentInput.addEventListener('input', () => {
+                charCount.textContent = contentInput.value.length;
+            });
+
+            // Soumission
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                if (!wasmReady) {
+                    alert('Le réseau n\'est pas encore prêt. Veuillez patienter...');
+                    return;
+                }
+
+                const author = authorInput.value.trim();
+                const content = contentInput.value.trim();
+                
+                if (!author || !content) return;
+                
+                localStorage.setItem('zeta_username', author);
+                submitBtn.disabled = true;
+                submitBtn.textContent = '📤 Envoi...';
+                
+                try {
+                    // Appel au code Rust WASM pour publier
+                    await publish_post(content, author);
+                    contentInput.value = '';
+                    charCount.textContent = '0';
+                } catch (error) {
+                    console.error('Erreur publication:', error);
+                    alert('Erreur: ' + error.message);
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '📤 Publier sur le réseau P2P';
+                }
+            });
+        });
+
+        // Utilitaires
         function escapeHtml(text) {
             if (!text) return '';
             const div = document.createElement('div');
@@ -563,12 +736,8 @@
             return date.toLocaleDateString('fr-FR');
         }
 
-        // Heartbeat
-        setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'ping' }));
-            }
-        }, 30000);
+        // Démarrer
+        main();
     </script>
 </body>
 </html>
