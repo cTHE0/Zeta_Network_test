@@ -209,6 +209,7 @@ async fn handle_websocket(
                     Some(Ok(msg)) => {
                         if msg.is_text() {
                             if let Ok(text) = msg.to_str() {
+                                tracing::debug!("📥 Message WebSocket reçu: {}", text);
                                 if let Ok(ws_msg) = serde_json::from_str::<WsMessage>(text) {
                                     match ws_msg.msg_type.as_str() {
                                         "post" => {
@@ -216,28 +217,51 @@ async fn handle_websocket(
                                                 let post = Post {
                                                     id: uuid::Uuid::new_v4().to_string(),
                                                     author: browser_peer_id.clone(),
-                                                    author_name,
-                                                    content,
+                                                    author_name: author_name.clone(),
+                                                    content: content.clone(),
                                                     timestamp: chrono::Utc::now().timestamp(),
                                                 };
+                                                
+                                                // Ajouter aux posts locaux
+                                                {
+                                                    let mut posts = network_state.posts.write().await;
+                                                    posts.insert(0, post.clone());
+                                                    if posts.len() > 100 {
+                                                        posts.truncate(100);
+                                                    }
+                                                }
+                                                
+                                                // Broadcast à tous les clients WebSocket
+                                                let broadcast_msg = serde_json::json!({
+                                                    "type": "new_post",
+                                                    "post": post
+                                                }).to_string();
+                                                let _ = network_state.ws_broadcast.send(broadcast_msg);
                                                 
                                                 // Relayer au réseau P2P
                                                 let state_guard = p2p_state.read().await;
                                                 let (_, _, ws_to_p2p_tx, _, _) = &*state_guard;
                                                 let _ = ws_to_p2p_tx.send(NetworkMessage::Post(post.clone()));
                                                 
-                                                tracing::info!("📝 Post WebSocket relayé: {}", post.content);
+                                                tracing::info!("📝 Post WebSocket relayé: {} - {}", author_name, content);
                                             }
                                         }
                                         "ping" => {
                                             let _ = ws_tx.send(Message::text(r#"{"type":"pong"}"#)).await;
                                         }
-                                        _ => {}
+                                        _ => {
+                                            tracing::debug!("⚠️ Type de message inconnu: {}", ws_msg.msg_type);
+                                        }
                                     }
+                                } else {
+                                    tracing::warn!("⚠️ Message WebSocket invalide: {}", text);
                                 }
                             }
                         } else if msg.is_close() {
+                            tracing::info!("🚪 Client demande fermeture WebSocket");
                             break;
+                        } else if msg.is_ping() {
+                            let _ = ws_tx.send(Message::pong(msg.into_bytes())).await;
                         }
                     }
                     Some(Err(e)) => {

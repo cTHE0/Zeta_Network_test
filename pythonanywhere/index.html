@@ -255,7 +255,7 @@
         const DEFAULT_RELAYS = [
             // WSS (fonctionnent depuis HTTPS) - Cloudflare Tunnel
             // ⚠️ Cette URL change à chaque redémarrage du relay !
-            { name: "Zeta Primary (WSS)", url: "wss://composition-poly-environmental-reporter.trycloudflare.com/ws", wss: true },
+            { name: "Zeta Primary (WSS)", url: "wss://mounting-organizing-glen-mpeg.trycloudflare.com/ws", wss: true },
             
             // Fallback WS (fonctionne seulement depuis HTTP)
             { name: "ServerCheap Direct (WS)", url: "ws://65.75.201.11:3030/ws", wss: false }
@@ -272,10 +272,34 @@
         let relays = [...DEFAULT_RELAYS];
         let relayStatuses = {};
         let reconnectAttempts = 0;
+        let pingInterval = null;
         const MAX_RECONNECT_ATTEMPTS = 5;
+        const PING_INTERVAL_MS = 25000; // Ping toutes les 25 secondes
 
         const $ = id => document.getElementById(id);
         const isHttps = location.protocol === 'https:';
+
+        // Keep-alive ping
+        function startPingInterval() {
+            stopPingInterval();
+            pingInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.send(JSON.stringify({ type: 'ping' }));
+                        console.log('📡 Ping envoyé');
+                    } catch (e) {
+                        console.error('Erreur ping:', e);
+                    }
+                }
+            }, PING_INTERVAL_MS);
+        }
+
+        function stopPingInterval() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+            }
+        }
 
         // Charger les relais custom depuis localStorage
         function loadCustomRelays() {
@@ -528,6 +552,9 @@
                     updateRelayList();
                     updateStatus('connected', `Connecté via ${relay.name}`);
                     hideAlert();
+                    
+                    // Démarrer le ping keep-alive
+                    startPingInterval();
                 };
 
                 ws.onmessage = (e) => {
@@ -541,6 +568,7 @@
 
                 ws.onclose = (e) => {
                     console.log('❌ Déconnecté', e.code, e.reason);
+                    stopPingInterval();
                     if (currentRelay === relay) {
                         relayStatuses[relay.url] = 'failed';
                         updateRelayList();
@@ -553,6 +581,7 @@
 
                 ws.onerror = (err) => {
                     console.error(`Erreur ${relay.name}:`, err);
+                    stopPingInterval();
                     clearTimeout(timeout);
                     relayStatuses[relay.url] = 'failed';
                     updateRelayList();
@@ -567,12 +596,19 @@
         }
 
         function connectToSpecificRelay(index) {
+            stopPingInterval();
             // Reset tous les status
             Object.keys(relayStatuses).forEach(k => relayStatuses[k] = 'unknown');
             connectToRelay(index);
         }
 
         function handleMessage(data) {
+            // Ignorer les pong silencieusement
+            if (data.type === 'pong') {
+                console.log('📡 Pong reçu');
+                return;
+            }
+            
             console.log('📩', data.type || data);
             
             if (data.type === 'init' || data.type === 'welcome') {
