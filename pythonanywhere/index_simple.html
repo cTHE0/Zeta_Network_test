@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeta Network - Réseau Social Décentralisé P2P</title>
+    <style>
+        :root {
+            --bg-primary: #15202b;
+            --bg-secondary: #192734;
+            --bg-tertiary: #22303c;
+            --text-primary: #ffffff;
+            --text-secondary: #8899a6;
+            --accent-color: #1da1f2;
+            --success-color: #17bf63;
+            --error-color: #e0245e;
+            --border-color: #38444d;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        header { text-align: center; padding: 30px 0; border-bottom: 1px solid var(--border-color); margin-bottom: 30px; }
+        h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .subtitle { color: var(--text-secondary); margin-bottom: 15px; }
+        .status { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .status-dot.connected { background: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
+        .status-dot.disconnected { background: var(--error-color); }
+        .status-dot.connecting { background: #ffad1f; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .card { background: var(--bg-secondary); border-radius: 16px; padding: 20px; margin-bottom: 20px; border: 1px solid var(--border-color); }
+        .card h2 { margin-bottom: 15px; }
+        .info { font-family: monospace; font-size: 0.85rem; color: var(--text-secondary); word-break: break-all; }
+        .warning { background: #5c3d00; border: 1px solid #ffad1f; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        .warning h3 { color: #ffad1f; margin-bottom: 10px; }
+        input, textarea { width: 100%; padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-primary); font-size: 1rem; margin-bottom: 10px; }
+        input:focus, textarea:focus { outline: none; border-color: var(--accent-color); }
+        button { width: 100%; padding: 12px; background: var(--accent-color); color: white; border: none; border-radius: 25px; font-size: 1rem; cursor: pointer; }
+        button:hover { background: #1a91da; }
+        button:disabled { background: var(--border-color); cursor: not-allowed; }
+        .posts { max-height: 400px; overflow-y: auto; }
+        .post { background: var(--bg-tertiary); padding: 15px; border-radius: 10px; margin-bottom: 10px; }
+        .post-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .post-author { font-weight: bold; }
+        .post-time { color: var(--text-secondary); font-size: 0.8rem; }
+        .post-content { white-space: pre-wrap; }
+        .empty { color: var(--text-secondary); text-align: center; padding: 30px; font-style: italic; }
+        .peer { padding: 8px; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 5px; font-size: 0.9rem; }
+        footer { text-align: center; padding: 20px; color: var(--text-secondary); font-size: 0.85rem; border-top: 1px solid var(--border-color); margin-top: 30px; }
+        footer a { color: var(--accent-color); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 Zeta Network</h1>
+            <p class="subtitle">Réseau social décentralisé P2P</p>
+            <div class="status">
+                <span id="status-dot" class="status-dot disconnected"></span>
+                <span id="status-text">Déconnecté</span>
+            </div>
+        </header>
+
+        <div class="warning">
+            <h3>⚠️ Mode dégradé (HTTPS → HTTP bloqué)</h3>
+            <p>Ce site est en HTTPS mais le relay P2P est en HTTP. Les navigateurs bloquent cette connexion par sécurité.</p>
+            <p style="margin-top: 10px;"><strong>Solution :</strong> Ouvrez directement <a href="http://65.75.201.11:3030/" style="color: #ffad1f;">http://65.75.201.11:3030/</a> (HTTP)</p>
+        </div>
+
+        <div class="card">
+            <h2>📊 Votre Connexion</h2>
+            <div class="info">
+                <p><strong>Peer ID:</strong> <span id="peer-id">Non connecté</span></p>
+                <p><strong>Relay:</strong> ws://65.75.201.11:3030/ws</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>👥 Pairs connectés (<span id="peer-count">0</span>)</h2>
+            <div id="peers-list"><p class="empty">Aucun pair</p></div>
+        </div>
+
+        <div class="card">
+            <h2>✍️ Publier un message</h2>
+            <input type="text" id="author" placeholder="Votre nom" maxlength="50">
+            <textarea id="content" placeholder="Votre message..." rows="3" maxlength="280"></textarea>
+            <button id="send-btn" disabled>📤 Publier</button>
+        </div>
+
+        <div class="card">
+            <h2>📰 Messages (<span id="post-count">0</span>)</h2>
+            <div id="posts-list" class="posts"><p class="empty">Aucun message</p></div>
+        </div>
+
+        <footer>
+            <p>🦀 Powered by Rust & libp2p | <a href="https://github.com/cTHE0/Zeta_Network_test">GitHub</a></p>
+        </footer>
+    </div>
+
+    <script>
+        const RELAY_WS = 'ws://65.75.201.11:3030/ws';
+        let ws = null;
+        let myPeerId = 'browser-' + Math.random().toString(36).substr(2, 8);
+        let posts = [];
+        let peers = [];
+
+        const $ = id => document.getElementById(id);
+
+        function updateStatus(status, text) {
+            $('status-dot').className = 'status-dot ' + status;
+            $('status-text').textContent = text;
+            $('send-btn').disabled = status !== 'connected';
+        }
+
+        function updateUI() {
+            $('peer-id').textContent = myPeerId;
+            $('peer-count').textContent = peers.length;
+            $('post-count').textContent = posts.length;
+
+            if (peers.length === 0) {
+                $('peers-list').innerHTML = '<p class="empty">Aucun pair</p>';
+            } else {
+                $('peers-list').innerHTML = peers.map(p => 
+                    `<div class="peer">${p.is_browser ? '🌐' : '💻'} ${p.name || 'Anonyme'} (${p.peer_id.substring(0,12)}...)</div>`
+                ).join('');
+            }
+
+            if (posts.length === 0) {
+                $('posts-list').innerHTML = '<p class="empty">Aucun message</p>';
+            } else {
+                $('posts-list').innerHTML = posts.map(p => {
+                    const date = new Date(p.timestamp * 1000);
+                    const time = date.toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'});
+                    return `<div class="post">
+                        <div class="post-header">
+                            <span class="post-author">${escapeHtml(p.author_name)}</span>
+                            <span class="post-time">${time}</span>
+                        </div>
+                        <div class="post-content">${escapeHtml(p.content)}</div>
+                    </div>`;
+                }).join('');
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function connect() {
+            updateStatus('connecting', 'Connexion...');
+            
+            try {
+                ws = new WebSocket(RELAY_WS);
+                
+                ws.onopen = () => {
+                    console.log('✅ Connecté');
+                    updateStatus('connected', 'Connecté au réseau P2P');
+                };
+                
+                ws.onmessage = (e) => {
+                    try {
+                        const data = JSON.parse(e.data);
+                        console.log('📩', data);
+                        
+                        if (data.type === 'init') {
+                            if (data.peer_id) myPeerId = data.peer_id;
+                            peers = data.peers || [];
+                            posts = data.posts || [];
+                            updateUI();
+                        } else if (data.type === 'new_post' || data.Post) {
+                            const post = data.post || data.Post || data;
+                            if (post && post.id && !posts.find(p => p.id === post.id)) {
+                                posts.unshift(post);
+                                updateUI();
+                            }
+                        } else if (data.type === 'peer_update') {
+                            peers = data.peers || [];
+                            updateUI();
+                        }
+                    } catch (err) {
+                        console.error('Parse error:', err);
+                    }
+                };
+                
+                ws.onclose = () => {
+                    console.log('❌ Déconnecté');
+                    updateStatus('disconnected', 'Déconnecté');
+                    setTimeout(connect, 5000);
+                };
+                
+                ws.onerror = (err) => {
+                    console.error('WebSocket error:', err);
+                    updateStatus('disconnected', '⚠️ Erreur - Mixed content bloqué');
+                };
+            } catch (err) {
+                console.error('Connection error:', err);
+                updateStatus('disconnected', '⚠️ Connexion impossible');
+            }
+        }
+
+        function sendPost() {
+            const author = $('author').value.trim();
+            const content = $('content').value.trim();
+            
+            if (!author || !content || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            localStorage.setItem('zeta_username', author);
+            
+            ws.send(JSON.stringify({
+                type: 'post',
+                content: content,
+                author_name: author
+            }));
+            
+            $('content').value = '';
+        }
+
+        // Init
+        const savedName = localStorage.getItem('zeta_username');
+        if (savedName) $('author').value = savedName;
+        
+        $('send-btn').onclick = sendPost;
+        $('content').onkeydown = (e) => { if (e.key === 'Enter' && e.ctrlKey) sendPost(); };
+        
+        // Try to connect (will fail due to mixed content)
+        connect();
+        
+        updateUI();
+    </script>
+</body>
+</html>

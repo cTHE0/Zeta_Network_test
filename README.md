@@ -1,53 +1,68 @@
 # Zeta2 - Réseau Social Décentralisé 🌐
 
-Un prototype de réseau social décentralisé type Twitter construit avec **rust-libp2p**.
+Un réseau social décentralisé P2P construit avec **Rust** et **libp2p**.
+
+## 🚀 Démarrage Rapide
+
+### Rejoindre comme utilisateur
+Ouvrez simplement : **https://tt665.pythonanywhere.com**
+
+### Devenir un relais (une seule commande !)
+```bash
+curl -sSL https://raw.githubusercontent.com/cTHE0/Zeta_Network_test/main/run_relay.sh | bash
+```
+
+Cette commande :
+- ✅ Installe Rust automatiquement
+- ✅ Installe les dépendances
+- ✅ Compile le relay
+- ✅ Crée un tunnel WSS sécurisé
+- ✅ Affiche votre URL à partager
 
 ## 🎯 Caractéristiques
 
-- **Complètement décentralisé** : Aucun serveur central
-- **Communication P2P** : Utilise libp2p avec GossipSub pour la propagation des messages
-- **Support traversée NAT** : Les clients peuvent se connecter directement à un nœud public
-- **Interface Web** : Interface localhost pour voir les pairs et publier des messages
-- **Auto-adaptatif** : Le code s'adapte automatiquement selon l'environnement (serveur public ou client)
-- **Découverte mDNS** : Découverte automatique sur réseau local
+- **Complètement décentralisé** : Aucun serveur central obligatoire
+- **Communication P2P** : Utilise libp2p avec GossipSub
+- **Tunnel WSS automatique** : Via Cloudflare Tunnel (gratuit)
+- **Interface Web** : Accessible depuis n'importe quel navigateur
+- **Multi-relais** : Supporte plusieurs relais pour la résilience
 
 ## 🏗️ Architecture
 
-### Composants principaux
-
-1. **Nœud P2P (libp2p)**
-   - GossipSub pour la diffusion des messages
-   - mDNS pour la découverte locale
-   - Kademlia DHT pour le routage distribué
-   - Identify pour l'échange d'informations entre pairs
-
-2. **Serveur Web (Warp)**
-   - API REST pour interagir avec le réseau
-   - Serveur de fichiers statiques pour l'interface
-   - Communication bidirectionnelle avec le nœud P2P via channels
-
-3. **Interface Web**
-   - Vue en temps réel des pairs connectés
-   - Fil d'actualité des posts
-   - Formulaire de publication
-
-## 🚀 Installation
-
-### Prérequis
-
-- Rust 1.70+ ([Installation](https://rustup.rs/))
-- Cargo (inclus avec Rust)
-
-### Compilation
-
-```bash
-cd /home/administrateur/Documents/Claude/zeta2
-cargo build --release
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Navigateur    │     │   Navigateur    │     │   Navigateur    │
+│   (Utilisateur) │     │   (Utilisateur) │     │   (Relais CLI)  │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │ WSS                   │ WSS                   │ TCP
+         │                       │                       │
+         └───────────┬───────────┴───────────┬───────────┘
+                     │                       │
+              ┌──────▼──────┐         ┌──────▼──────┐
+              │   Relais 1  │◄───────►│   Relais 2  │
+              │  (Rust P2P) │  libp2p │  (Rust P2P) │
+              └─────────────┘         └─────────────┘
 ```
 
-## 📋 Utilisation
+## 📋 Utilisation Détaillée
 
-### Mode Serveur (Nœud sur serveur public)
+### Lancer un relais (si déjà cloné)
+```bash
+./run_relay.sh
+```
+
+### Lancer manuellement (avancé)
+```bash
+# Compiler
+cargo build --release
+
+# Lancer le relay
+./target/release/zeta2 --port 3030
+
+# Dans un autre terminal, lancer le tunnel
+cloudflared tunnel --url http://localhost:3030
+```
+
 
 Le serveur public permet aux clients derrière NAT de se connecter.
 

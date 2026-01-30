@@ -159,10 +159,14 @@ install_cloudflared() {
 build_relay() {
     echo -e "\n${YELLOW}📥 Préparation du relay Zeta...${NC}"
     
-    if [ -d "$INSTALL_DIR" ]; then
+    # Détecter si on est déjà dans le repo
+    if [ -f "./Cargo.toml" ] && grep -q "zeta" "./Cargo.toml" 2>/dev/null; then
+        echo -e "${GREEN}✅ Déjà dans le répertoire Zeta${NC}"
+        INSTALL_DIR="$(pwd)"
+    elif [ -d "$INSTALL_DIR" ]; then
         echo "Mise à jour du code existant..."
         cd "$INSTALL_DIR"
-        git pull --quiet
+        git pull --quiet 2>/dev/null || true
     else
         echo "Clonage du repository..."
         git clone --quiet "$REPO_URL" "$INSTALL_DIR"
@@ -172,8 +176,17 @@ build_relay() {
     # S'assurer que l'environnement Rust est chargé
     [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
     
-    echo -e "${YELLOW}🔨 Compilation en mode release (peut prendre quelques minutes)...${NC}"
-    cargo build --release --quiet
+    # Skip compilation si binaire existe et est récent
+    if [ -f "./target/release/zeta2" ]; then
+        BINARY_AGE=$(( $(date +%s) - $(stat -c %Y ./target/release/zeta2 2>/dev/null || echo 0) ))
+        if [ $BINARY_AGE -lt 3600 ]; then
+            echo -e "${GREEN}✅ Binaire déjà compilé (< 1h)${NC}"
+            return
+        fi
+    fi
+    
+    echo -e "${YELLOW}🔨 Compilation en mode release (première fois = quelques minutes)...${NC}"
+    cargo build --release 2>&1 | tail -5
     
     echo -e "${GREEN}✅ Relay compilé avec succès${NC}"
 }
@@ -182,64 +195,86 @@ build_relay() {
 # 6. Lancement du relay avec tunnel
 # ============================================================
 run_relay() {
+    # Aller dans le bon répertoire
+    if [ -f "./target/release/zeta2" ]; then
+        INSTALL_DIR="$(pwd)"
+    fi
     cd "$INSTALL_DIR"
     
     echo -e "\n${CYAN}╔════════════════════════════════════════════════════════════╗"
     echo -e "║              🚀 DÉMARRAGE DU RELAY ZETA                     ║"
     echo -e "╚════════════════════════════════════════════════════════════╝${NC}"
     
-    # Créer un fichier temporaire pour capturer l'URL du tunnel
-    TUNNEL_URL_FILE=$(mktemp)
+    # Tuer les anciennes instances
+    pkill -f "zeta2.*--port" 2>/dev/null || true
+    pkill -f "cloudflared tunnel" 2>/dev/null || true
+    sleep 1
     
     # Lancer le relay Zeta en arrière-plan
     echo -e "\n${BLUE}1️⃣ Démarrage du relay Zeta sur le port $PORT...${NC}"
-    ./target/release/zeta2 --port $PORT &
+    ./target/release/zeta2 --port $PORT > /tmp/zeta_relay.log 2>&1 &
     RELAY_PID=$!
     
     # Attendre que le relay soit prêt
-    sleep 3
+    sleep 2
     if ! kill -0 $RELAY_PID 2>/dev/null; then
         echo -e "${RED}❌ Erreur: Le relay n'a pas pu démarrer${NC}"
+        cat /tmp/zeta_relay.log
         exit 1
     fi
     echo -e "${GREEN}✅ Relay démarré (PID: $RELAY_PID)${NC}"
     
-    # Lancer le tunnel Cloudflare
+    # Lancer le tunnel Cloudflare et capturer l'URL
     echo -e "\n${BLUE}2️⃣ Création du tunnel Cloudflare...${NC}"
-    cloudflared tunnel --url http://localhost:$PORT 2>&1 | tee /dev/stderr | grep -oP 'https://[a-z0-9-]+\.trycloudflare\.com' | head -1 > "$TUNNEL_URL_FILE" &
+    
+    # Utiliser un fichier pour les logs du tunnel
+    TUNNEL_LOG="/tmp/cloudflared_$$.log"
+    cloudflared tunnel --url http://localhost:$PORT > "$TUNNEL_LOG" 2>&1 &
     TUNNEL_PID=$!
     
-    # Attendre l'URL du tunnel
-    echo -e "${YELLOW}⏳ Attente de l'URL du tunnel...${NC}"
+    # Attendre et chercher l'URL dans les logs
+    echo -e "${YELLOW}⏳ Attente de l'URL du tunnel (10-20 sec)...${NC}"
+    TUNNEL_URL=""
     for i in {1..30}; do
-        if [ -s "$TUNNEL_URL_FILE" ]; then
-            TUNNEL_URL=$(cat "$TUNNEL_URL_FILE")
+        sleep 1
+        # Chercher l'URL dans les logs
+        TUNNEL_URL=$(grep -oE 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' "$TUNNEL_LOG" 2>/dev/null | head -1)
+        if [ -n "$TUNNEL_URL" ]; then
             break
         fi
-        sleep 1
+        echo -n "."
     done
+    echo ""
     
     if [ -z "$TUNNEL_URL" ]; then
         echo -e "${RED}❌ Impossible d'obtenir l'URL du tunnel${NC}"
-        echo -e "${YELLOW}Le relay tourne quand même en local sur le port $PORT${NC}"
+        echo -e "${YELLOW}Logs du tunnel:${NC}"
+        cat "$TUNNEL_LOG" | head -20
+        echo ""
+        echo -e "${YELLOW}Le relay tourne quand même en local: ws://localhost:$PORT/ws${NC}"
+        echo -e "${YELLOW}Vérifiez votre connexion internet ou réessayez.${NC}"
     else
         WSS_URL="${TUNNEL_URL/https:/wss:}/ws"
         
         echo -e "\n${GREEN}╔════════════════════════════════════════════════════════════╗"
         echo -e "║                    🎉 RELAY ACTIF !                         ║"
-        echo -e "╠════════════════════════════════════════════════════════════╣"
-        echo -e "║                                                            ║"
-        echo -e "║  🌐 URL HTTPS: ${TUNNEL_URL}"
-        echo -e "║                                                            ║"
-        echo -e "║  🔌 WebSocket WSS: ${WSS_URL}"
-        echo -e "║                                                            ║"
-        echo -e "║  📋 Copiez l'URL WSS dans la config du site Zeta           ║"
-        echo -e "║                                                            ║"
-        echo -e "╚════════════════════════════════════════════════════════════╝${NC}"
+        echo -e "╠════════════════════════════════════════════════════════════╣${NC}"
+        echo -e "${GREEN}║${NC}"
+        echo -e "${GREEN}║${NC}  🌐 URL HTTPS: ${CYAN}${TUNNEL_URL}${NC}"
+        echo -e "${GREEN}║${NC}"
+        echo -e "${GREEN}║${NC}  🔌 WebSocket: ${CYAN}${WSS_URL}${NC}"
+        echo -e "${GREEN}║${NC}"
+        echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
         
-        # Sauvegarder l'URL dans un fichier
+        # Sauvegarder l'URL
         echo "$WSS_URL" > "$INSTALL_DIR/current_wss_url.txt"
         echo -e "\n${BLUE}💾 URL sauvegardée dans: $INSTALL_DIR/current_wss_url.txt${NC}"
+        
+        # Copier dans le presse-papier si possible
+        if command -v xclip &> /dev/null; then
+            echo "$WSS_URL" | xclip -selection clipboard
+            echo -e "${GREEN}📋 URL copiée dans le presse-papier !${NC}"
+        fi
     fi
     
     echo -e "\n${YELLOW}📌 Appuyez sur Ctrl+C pour arrêter le relay${NC}"
@@ -250,15 +285,21 @@ run_relay() {
         echo -e "\n${YELLOW}🛑 Arrêt du relay...${NC}"
         kill $RELAY_PID 2>/dev/null || true
         kill $TUNNEL_PID 2>/dev/null || true
-        rm -f "$TUNNEL_URL_FILE"
+        rm -f "$TUNNEL_LOG"
         echo -e "${GREEN}✅ Relay arrêté proprement${NC}"
         exit 0
     }
     
     trap cleanup SIGINT SIGTERM
     
+    # Afficher les logs en temps réel
+    echo -e "${BLUE}📊 Logs du relay:${NC}"
+    tail -f /tmp/zeta_relay.log &
+    TAIL_PID=$!
+    
     # Garder le script actif
     wait $RELAY_PID
+    kill $TAIL_PID 2>/dev/null || true
 }
 
 # ============================================================
