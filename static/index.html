@@ -10,7 +10,11 @@
     <div class="container">
         <header>
             <h1>🌐 Zeta2</h1>
-            <p class="subtitle">Réseau social décentralisé sur libp2p</p>
+            <p class="subtitle">Réseau social décentralisé P2P</p>
+            <div class="connection-status">
+                <span id="connection-indicator" class="status-indicator status-disconnected"></span>
+                <span id="connection-text">Déconnecté</span>
+            </div>
         </header>
 
         <div class="main-content">
@@ -21,15 +25,19 @@
                     <div class="info-grid">
                         <div class="info-item">
                             <span class="label">Votre Peer ID:</span>
-                            <span class="value" id="local-peer-id">Chargement...</span>
+                            <span class="value" id="local-peer-id">En attente...</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Votre Nom:</span>
+                            <span class="value" id="local-name">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Mode:</span>
+                            <span class="value" id="node-mode">-</span>
                         </div>
                         <div class="info-item">
                             <span class="label">Pairs connectés:</span>
                             <span class="value" id="peer-count">0</span>
-                        </div>
-                        <div class="info-item">
-                            <span class="label">Posts totaux:</span>
-                            <span class="value" id="post-count">0</span>
                         </div>
                     </div>
                 </div>
@@ -70,7 +78,7 @@
                                 <span id="char-count">0</span>/280
                             </div>
                         </div>
-                        <button type="submit" class="btn-primary">
+                        <button type="submit" class="btn-primary" id="submit-btn">
                             📤 Publier
                         </button>
                     </form>
@@ -78,13 +86,17 @@
 
                 <!-- Fil d'actualité -->
                 <div class="card">
-                    <h2>📰 Fil d'Actualité</h2>
+                    <h2>📰 Fil d'Actualité <span id="post-count-badge" class="badge">0</span></h2>
                     <div id="posts-feed" class="posts-feed">
                         <p class="empty-state">Aucun post pour le moment</p>
                     </div>
                 </div>
             </div>
         </div>
+
+        <footer>
+            <p>🔗 Connexion temps réel via WebSocket | Powered by libp2p</p>
+        </footer>
     </div>
 
     <script src="app.js"></script>
