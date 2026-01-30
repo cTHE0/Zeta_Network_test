@@ -254,8 +254,11 @@
         // =====================================================
         const DEFAULT_RELAYS = [
             // WSS (fonctionnent depuis HTTPS) - Cloudflare Tunnel
-            // ⚠️ Cette URL change à chaque redémarrage du relay !
+            // ⚠️ Ces URLs changent à chaque redémarrage des relays !
             { name: "Zeta Primary (WSS)", url: "wss://mounting-organizing-glen-mpeg.trycloudflare.com/ws", wss: true },
+            
+            // Ajoutez ici le 2ème relais de votre ami :
+            // { name: "Relay Ami (WSS)", url: "wss://URL-DE-VOTRE-AMI.trycloudflare.com/ws", wss: true },
             
             // Fallback WS (fonctionne seulement depuis HTTP)
             { name: "ServerCheap Direct (WS)", url: "ws://65.75.201.11:3030/ws", wss: false }

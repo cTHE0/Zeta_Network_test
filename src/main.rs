@@ -16,7 +16,8 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use tracing::{error, info};
+use tracing::{error, info, warn};
+use std::io::{BufRead, BufReader};
 
 mod web_server;
 
@@ -269,21 +270,50 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("🎉 Zeta2 démarré! Interface web sur http://localhost:{}", web_port);
     info!("⏳ En attente des événements réseau...");
 
+    // Charger les bootstrap peers (autres relais connus)
+    let bootstrap_peers = load_bootstrap_peers();
+    if !bootstrap_peers.is_empty() {
+        info!("📋 {} bootstrap peer(s) trouvé(s)", bootstrap_peers.len());
+        for (peer_id, addr) in &bootstrap_peers {
+            info!("   🔗 Bootstrap: {} @ {}", peer_id, addr);
+            // Ajouter au Kademlia DHT
+            swarm.behaviour_mut().kad.add_address(peer_id, addr.clone());
+            // Tenter la connexion
+            if let Err(e) = swarm.dial(addr.clone()) {
+                warn!("⚠️  Échec connexion bootstrap {}: {}", peer_id, e);
+            }
+        }
+    } else {
+        info!("📋 Aucun bootstrap peer configuré (fichier bootstrap.txt)");
+    }
+
     // Timer pour reconnexion automatique (commence après 30s)
     let mut reconnect_interval = tokio::time::interval(Duration::from_secs(30));
     reconnect_interval.tick().await; // Consommer le premier tick immédiat
     let mut connected_to_relay = false;
+    let bootstrap_peers_clone = bootstrap_peers.clone();
 
     // Boucle événements
     loop {
         tokio::select! {
             // Timer de reconnexion
             _ = reconnect_interval.tick() => {
+                // Reconnecter au relay si configuré
                 if !connected_to_relay {
                     if let Some(ref addr) = relay_multiaddr {
                         info!("🔄 Tentative de reconnexion au relay...");
                         if let Err(e) = swarm.dial(addr.clone()) {
                             error!("❌ Échec reconnexion: {}", e);
+                        }
+                    }
+                }
+                // Reconnecter aux bootstrap peers si déconnectés
+                let connected_peers: Vec<_> = swarm.connected_peers().cloned().collect();
+                for (peer_id, addr) in &bootstrap_peers_clone {
+                    if !connected_peers.contains(peer_id) {
+                        info!("🔄 Reconnexion au bootstrap peer {}...", peer_id);
+                        if let Err(e) = swarm.dial(addr.clone()) {
+                            warn!("⚠️  Échec reconnexion bootstrap: {}", e);
                         }
                     }
                 }
@@ -316,7 +346,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             event = swarm.select_next_some() => match event {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    info!("🎧 Écoute sur: {}/p2p/{}", address, local_peer_id);
+                    let full_addr = format!("{}/p2p/{}", address, local_peer_id);
+                    info!("🎧 Écoute sur: {}", full_addr);
+                    if is_relay {
+                        info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                        info!("📋 ADRESSE BOOTSTRAP À PARTAGER:");
+                        info!("   {}", full_addr);
+                        info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    }
                 }
                 SwarmEvent::Behaviour(ZetaBehaviourEvent::Gossipsub(
                     gossipsub::Event::Message {
@@ -404,4 +441,60 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
+}
+
+/// Charge les bootstrap peers depuis le fichier bootstrap.txt
+/// Format: une ligne par peer avec l'adresse multiaddr complète
+/// Exemple: /ip4/65.75.201.11/tcp/4001/p2p/12D3KooWXYZ...
+fn load_bootstrap_peers() -> Vec<(PeerId, Multiaddr)> {
+    let bootstrap_file = "bootstrap.txt";
+    let mut peers = Vec::new();
+    
+    if !Path::new(bootstrap_file).exists() {
+        // Créer un fichier exemple
+        let example = r#"# Bootstrap peers pour Zeta2
+# Une adresse multiaddr par ligne
+# Format: /ip4/IP/tcp/4001/p2p/PEER_ID
+# Exemple:
+# /ip4/65.75.201.11/tcp/4001/p2p/12D3KooWXYZabc123...
+"#;
+        let _ = fs::write(bootstrap_file, example);
+        return peers;
+    }
+    
+    let file = match fs::File::open(bootstrap_file) {
+        Ok(f) => f,
+        Err(_) => return peers,
+    };
+    
+    let reader = BufReader::new(file);
+    for line in reader.lines().flatten() {
+        let line = line.trim();
+        // Ignorer les commentaires et lignes vides
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        
+        // Parser l'adresse multiaddr
+        if let Ok(addr) = line.parse::<Multiaddr>() {
+            // Extraire le PeerId de l'adresse
+            let peer_id = addr.iter().find_map(|p| {
+                if let libp2p::multiaddr::Protocol::P2p(pid) = p {
+                    Some(pid)
+                } else {
+                    None
+                }
+            });
+            
+            if let Some(pid) = peer_id {
+                peers.push((pid, addr));
+            } else {
+                warn!("⚠️  Bootstrap peer sans PeerId: {}", line);
+            }
+        } else {
+            warn!("⚠️  Adresse bootstrap invalide: {}", line);
+        }
+    }
+    
+    peers
 }

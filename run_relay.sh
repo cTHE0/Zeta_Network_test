@@ -270,6 +270,19 @@ run_relay() {
         echo "$WSS_URL" > "$INSTALL_DIR/current_wss_url.txt"
         echo -e "\n${BLUE}💾 URL sauvegardée dans: $INSTALL_DIR/current_wss_url.txt${NC}"
         
+        # Récupérer l'adresse P2P bootstrap depuis les logs
+        sleep 2
+        BOOTSTRAP_ADDR=$(grep "ADRESSE BOOTSTRAP" /tmp/zeta_relay.log -A 1 2>/dev/null | tail -1 | sed 's/.*   //')
+        if [ -n "$BOOTSTRAP_ADDR" ]; then
+            echo -e "\n${CYAN}╔════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║           🔗 POUR CONNECTER AVEC D'AUTRES RELAIS           ║${NC}"
+            echo -e "${CYAN}╠════════════════════════════════════════════════════════════╣${NC}"
+            echo -e "${CYAN}║${NC} Ajoutez cette adresse dans bootstrap.txt des autres relais:"
+            echo -e "${YELLOW}$BOOTSTRAP_ADDR${NC}"
+            echo -e "${CYAN}╚════════════════════════════════════════════════════════════╝${NC}"
+            echo "$BOOTSTRAP_ADDR" > "$INSTALL_DIR/bootstrap_addr.txt"
+        fi
+        
         # Copier dans le presse-papier si possible
         if command -v xclip &> /dev/null; then
             echo "$WSS_URL" | xclip -selection clipboard
