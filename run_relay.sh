@@ -176,6 +176,9 @@ build_relay() {
     # S'assurer que l'environnement Rust est chargé
     [ -f "$HOME/.cargo/env" ] && source "$HOME/.cargo/env"
     
+    # Configurer les bootstrap peers (relais connus du réseau)
+    setup_bootstrap_peers
+    
     # Skip compilation si binaire existe et est récent
     if [ -f "./target/release/zeta2" ]; then
         BINARY_AGE=$(( $(date +%s) - $(stat -c %Y ./target/release/zeta2 2>/dev/null || echo 0) ))
@@ -189,6 +192,40 @@ build_relay() {
     cargo build --release 2>&1 | tail -5
     
     echo -e "${GREEN}✅ Relay compilé avec succès${NC}"
+}
+
+# ============================================================
+# 5b. Configuration des bootstrap peers
+# ============================================================
+setup_bootstrap_peers() {
+    BOOTSTRAP_FILE="$INSTALL_DIR/bootstrap.txt"
+    
+    # Relais officiels du réseau Zeta (ajoutez les vôtres ici)
+    # Ces relais seront contactés automatiquement au démarrage
+    KNOWN_PEERS=(
+        # ServerCheap - Relay principal Zeta Network
+        "/ip4/65.75.201.11/tcp/4001/p2p/12D3KooWRp5kje4476MqzP7LWJesbDobhy7NW2k4spJx3DnMqWgF"
+    )
+    
+    # Créer/mettre à jour bootstrap.txt
+    echo "# Bootstrap peers Zeta Network - Auto-généré" > "$BOOTSTRAP_FILE"
+    echo "# Ces relais seront contactés automatiquement" >> "$BOOTSTRAP_FILE"
+    echo "" >> "$BOOTSTRAP_FILE"
+    
+    for peer in "${KNOWN_PEERS[@]}"; do
+        # Ne pas s'ajouter soi-même (vérifier si on est sur cette IP)
+        PEER_IP=$(echo "$peer" | grep -oP '(?<=/ip4/)[^/]+')
+        MY_IPS=$(hostname -I 2>/dev/null || echo "")
+        
+        if [[ ! "$MY_IPS" =~ "$PEER_IP" ]]; then
+            echo "$peer" >> "$BOOTSTRAP_FILE"
+            echo -e "${BLUE}🔗 Bootstrap peer ajouté: $PEER_IP${NC}"
+        else
+            echo -e "${YELLOW}⏭️  Skip: c'est nous ($PEER_IP)${NC}"
+        fi
+    done
+    
+    echo -e "${GREEN}✅ Bootstrap peers configurés${NC}"
 }
 
 # ============================================================

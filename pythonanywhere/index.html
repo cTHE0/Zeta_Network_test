@@ -257,8 +257,9 @@
             // ⚠️ Ces URLs changent à chaque redémarrage des relays !
             { name: "Zeta Primary (WSS)", url: "wss://mounting-organizing-glen-mpeg.trycloudflare.com/ws", wss: true },
             
-            // Ajoutez ici le 2ème relais de votre ami :
-            // { name: "Relay Ami (WSS)", url: "wss://URL-DE-VOTRE-AMI.trycloudflare.com/ws", wss: true },
+            // 🔗 Relay de ton ami - REMPLACE L'URL ci-dessous par celle de ton ami !
+            // Quand il lance run_relay.sh, il obtient une URL comme: wss://xxx-xxx-xxx.trycloudflare.com/ws
+            { name: "Relay Secondaire (WSS)", url: "wss://REMPLACER-PAR-URL-AMI.trycloudflare.com/ws", wss: true },
             
             // Fallback WS (fonctionne seulement depuis HTTP)
             { name: "ServerCheap Direct (WS)", url: "ws://65.75.201.11:3030/ws", wss: false }
