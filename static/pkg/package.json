@@ -1,0 +1,16 @@
+{
+  "name": "zeta-wasm",
+  "type": "module",
+  "description": "Zeta Network - Nœud P2P pour navigateur (WebAssembly)",
+  "version": "0.1.0",
+  "files": [
+    "zeta_wasm_bg.wasm",
+    "zeta_wasm.js",
+    "zeta_wasm.d.ts"
+  ],
+  "main": "zeta_wasm.js",
+  "types": "zeta_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

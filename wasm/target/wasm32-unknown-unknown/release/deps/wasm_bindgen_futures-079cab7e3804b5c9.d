@@ -1,0 +1,9 @@
+/home/administrateur/Documents/Claude/zeta2/wasm/target/wasm32-unknown-unknown/release/deps/wasm_bindgen_futures-079cab7e3804b5c9.d: /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/lib.rs /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/queue.rs /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/task/singlethread.rs
+
+/home/administrateur/Documents/Claude/zeta2/wasm/target/wasm32-unknown-unknown/release/deps/libwasm_bindgen_futures-079cab7e3804b5c9.rlib: /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/lib.rs /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/queue.rs /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/task/singlethread.rs
+
+/home/administrateur/Documents/Claude/zeta2/wasm/target/wasm32-unknown-unknown/release/deps/libwasm_bindgen_futures-079cab7e3804b5c9.rmeta: /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/lib.rs /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/queue.rs /home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/task/singlethread.rs
+
+/home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/lib.rs:
+/home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/queue.rs:
+/home/administrateur/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-futures-0.4.58/src/task/singlethread.rs:

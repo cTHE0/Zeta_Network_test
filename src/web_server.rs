@@ -81,12 +81,21 @@ pub async fn start_server(
             ws.on_upgrade(move |socket| handle_websocket(socket, state, p2p_state))
         });
 
+    // Route pour servir le dossier pkg (WASM)
+    let pkg_files = warp::path("pkg").and(warp::fs::dir("./static/pkg"));
+
     // Combiner les routes
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(vec!["GET", "POST", "OPTIONS"])
+        .allow_headers(vec!["Content-Type"]);
+    
     let routes = websocket
+        .or(pkg_files)
         .or(static_files)
         .or(network_info)
         .or(post_message)
-        .with(warp::cors().allow_any_origin());
+        .with(cors);
 
     tracing::info!("🌐 Serveur web démarré sur http://localhost:{}", port);
     tracing::info!("🔌 WebSocket disponible sur ws://localhost:{}/ws", port);
