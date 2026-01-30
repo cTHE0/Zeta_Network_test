@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeta Network - Réseau Social Décentralisé P2P</title>
+    <meta name="description" content="Zeta Network - Un réseau social décentralisé basé sur libp2p. Aucune inscription, aucun serveur central, vos données vous appartiennent.">
+    
+    <!-- Styles intégrés pour PythonAnywhere -->
+    <style>
+        :root {
+            --bg-primary: #15202b;
+            --bg-secondary: #192734;
+            --bg-tertiary: #22303c;
+            --text-primary: #ffffff;
+            --text-secondary: #8899a6;
+            --accent-color: #1da1f2;
+            --accent-hover: #1a91da;
+            --success-color: #17bf63;
+            --error-color: #e0245e;
+            --border-color: #38444d;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+        header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 30px;
+        }
+
+        header h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .subtitle { color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 15px; }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-connected { background: var(--success-color); box-shadow: 0 0 8px var(--success-color); }
+        .status-disconnected { background: var(--error-color); }
+        .status-connecting { background: #ffad1f; animation: pulse 1s infinite; }
+        .status-error { background: var(--error-color); }
+
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 30px;
+        }
+
+        @media (max-width: 900px) { .main-content { grid-template-columns: 1fr; } }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .card h2 {
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge {
+            background: var(--accent-color);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+        }
+
+        .info-grid { display: grid; gap: 12px; }
+        .info-item { display: flex; flex-direction: column; gap: 4px; }
+        .info-item .label { color: var(--text-secondary); font-size: 0.85rem; }
+        .info-item .value { font-family: monospace; font-size: 0.9rem; word-break: break-all; }
+
+        .peers-list { max-height: 300px; overflow-y: auto; }
+
+        .peer-item {
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .peer-item .peer-icon { font-size: 1.5rem; }
+        .peer-item .peer-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+        .peer-item .peer-name { font-weight: 500; }
+        .peer-item .peer-id { font-family: monospace; font-size: 0.75rem; color: var(--text-secondary); }
+        .peer-item.browser-peer { border-left: 3px solid var(--accent-color); }
+        .peer-item.native-peer { border-left: 3px solid var(--success-color); }
+
+        .form-group { margin-bottom: 15px; }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        textarea { resize: vertical; min-height: 80px; }
+
+        .char-count {
+            text-align: right;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 5px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            padding: 12px 24px;
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-primary:hover { background: var(--accent-hover); }
+        .btn-primary:disabled { background: var(--border-color); cursor: not-allowed; }
+
+        .posts-feed { max-height: 600px; overflow-y: auto; }
+
+        .post {
+            padding: 15px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            margin-bottom: 15px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .post-local { border-left: 3px solid var(--accent-color); }
+
+        .post-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .post-author { font-weight: 600; }
+        .post-time { font-size: 0.8rem; color: var(--text-secondary); }
+        .post-content { margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
+
+        .post-footer {
+            display: flex;
+            justify-content: flex-end;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state {
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 30px;
+            font-style: italic;
+        }
+
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border-color);
+            margin-top: 30px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 Zeta Network</h1>
+            <p class="subtitle">Réseau social décentralisé P2P - Powered by libp2p & Rust</p>
+            <div class="connection-status">
+                <span id="connection-indicator" class="status-indicator status-disconnected"></span>
+                <span id="connection-text">Connexion...</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Section d'information -->
+            <div class="info-section">
+                <div class="card">
+                    <h2>📊 Votre Connexion</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="label">Votre ID:</span>
+                            <span class="value" id="local-peer-id">En attente...</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Nom:</span>
+                            <span class="value" id="local-name">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Mode:</span>
+                            <span class="value" id="node-mode"><span class="badge">🌐 WebSocket</span></span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Pairs connectés:</span>
+                            <span class="value" id="peer-count">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>👥 Pairs sur le Réseau</h2>
+                    <div id="peers-list" class="peers-list">
+                        <p class="empty-state">Recherche de pairs...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section principale -->
+            <div class="posts-section">
+                <div class="card post-form">
+                    <h2>✍️ Publier un Message</h2>
+                    <form id="post-form">
+                        <div class="form-group">
+                            <input 
+                                type="text" 
+                                id="author" 
+                                placeholder="Votre nom (pseudo)" 
+                                required
+                                maxlength="50"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <textarea 
+                                id="content" 
+                                placeholder="Qu'avez-vous à dire au monde ?" 
+                                required
+                                maxlength="280"
+                                rows="3"
+                            ></textarea>
+                            <div class="char-count">
+                                <span id="char-count">0</span>/280
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary" id="submit-btn">
+                            📤 Publier sur le réseau P2P
+                        </button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>📰 Fil d'Actualité <span id="post-count-badge" class="badge">0</span></h2>
+                    <div id="posts-feed" class="posts-feed">
+                        <p class="empty-state">Aucun message pour le moment. Soyez le premier !</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>🦀 Backend Rust avec libp2p | 🔒 Décentralisé & Chiffré | 🌍 <a href="https://github.com/cTHE0/Zeta_Network_test" style="color: var(--accent-color);">Code source sur GitHub</a></p>
+        </footer>
+    </div>
+
+    <!-- Configuration du relay -->
+    <script>
+        // ⚠️ MODIFIER CES VALEURS SELON VOTRE CONFIGURATION
+        window.RELAY_CONFIG = {
+            // Adresse WebSocket de votre relay (serveur avec le noeud P2P)
+            websocket: "ws://65.75.201.11:3030/ws",
+            // API REST du relay
+            api: "http://65.75.201.11:3030/api"
+        };
+    </script>
+
+    <!-- Client JavaScript -->
+    <script>
+        // ============================================
+        // Zeta Network - Client WebSocket
+        // ============================================
+
+        let ws = null;
+        let myPeerId = null;
+        let posts = [];
+        let peers = [];
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 10;
+        const config = window.RELAY_CONFIG;
+
+        const elements = {};
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Zeta Network - Démarrage...');
+            console.log('📡 Relay:', config.websocket);
+            
+            elements.connectionIndicator = document.getElementById('connection-indicator');
+            elements.connectionText = document.getElementById('connection-text');
+            elements.localPeerId = document.getElementById('local-peer-id');
+            elements.localName = document.getElementById('local-name');
+            elements.nodeMode = document.getElementById('node-mode');
+            elements.peerCount = document.getElementById('peer-count');
+            elements.peersList = document.getElementById('peers-list');
+            elements.postsFeed = document.getElementById('posts-feed');
+            elements.postCountBadge = document.getElementById('post-count-badge');
+            elements.postForm = document.getElementById('post-form');
+            elements.authorInput = document.getElementById('author');
+            elements.contentInput = document.getElementById('content');
+            elements.charCount = document.getElementById('char-count');
+            elements.submitBtn = document.getElementById('submit-btn');
+
+            const savedUsername = localStorage.getItem('zeta_username');
+            if (savedUsername) elements.authorInput.value = savedUsername;
+
+            elements.postForm.addEventListener('submit', handleSubmit);
+            elements.contentInput.addEventListener('input', () => {
+                elements.charCount.textContent = elements.contentInput.value.length;
+            });
+
+            connectWebSocket();
+        });
+
+        function connectWebSocket() {
+            console.log('🔌 Connexion au relay:', config.websocket);
+            updateConnectionStatus('connecting');
+            
+            try {
+                ws = new WebSocket(config.websocket);
+                
+                ws.onopen = () => {
+                    console.log('✅ Connecté au réseau P2P');
+                    reconnectAttempts = 0;
+                    updateConnectionStatus('connected');
+                };
+                
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        handleMessage(data);
+                    } catch (e) {
+                        console.error('Erreur parsing:', e);
+                    }
+                };
+                
+                ws.onclose = () => {
+                    console.log('❌ Déconnecté');
+                    updateConnectionStatus('disconnected');
+                    scheduleReconnect();
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('Erreur WebSocket:', error);
+                    updateConnectionStatus('error');
+                };
+            } catch (e) {
+                console.error('Erreur:', e);
+                updateConnectionStatus('error');
+                scheduleReconnect();
+            }
+        }
+
+        function scheduleReconnect() {
+            if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                reconnectAttempts++;
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                console.log(`🔄 Reconnexion dans ${delay/1000}s...`);
+                setTimeout(connectWebSocket, delay);
+            }
+        }
+
+        function handleMessage(data) {
+            console.log('📩', data.type);
+            
+            switch (data.type) {
+                case 'init':
+                    myPeerId = data.peer_id;
+                    peers = data.peers || [];
+                    posts = data.posts || [];
+                    updateUI();
+                    break;
+                    
+                case 'new_post':
+                case 'Post':
+                    const post = data.post || data.Post || data;
+                    if (post && post.id && !posts.find(p => p.id === post.id)) {
+                        posts.unshift(post);
+                        updatePostsFeed();
+                    }
+                    break;
+                    
+                case 'peer_joined':
+                case 'PeerJoined':
+                    break;
+                    
+                case 'peer_left':
+                case 'PeerLeft':
+                    const leftId = data.peer_id || data.PeerLeft?.peer_id;
+                    if (leftId) {
+                        peers = peers.filter(p => p.peer_id !== leftId);
+                        updatePeersList();
+                    }
+                    break;
+                    
+                case 'pong':
+                    break;
+            }
+        }
+
+        async function handleSubmit(e) {
+            e.preventDefault();
+            
+            const author = elements.authorInput.value.trim();
+            const content = elements.contentInput.value.trim();
+            
+            if (!author || !content) return;
+            
+            localStorage.setItem('zeta_username', author);
+            elements.submitBtn.disabled = true;
+            elements.submitBtn.textContent = '📤 Envoi...';
+            
+            try {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: 'post',
+                        content: content,
+                        author_name: author
+                    }));
+                    elements.contentInput.value = '';
+                    elements.charCount.textContent = '0';
+                }
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+            } finally {
+                elements.submitBtn.disabled = false;
+                elements.submitBtn.textContent = '📤 Publier sur le réseau P2P';
+            }
+        }
+
+        function updateUI() {
+            if (myPeerId) {
+                elements.localPeerId.textContent = myPeerId.substring(0, 20) + '...';
+                elements.localPeerId.title = myPeerId;
+                elements.localName.textContent = `Browser-${myPeerId.substring(8, 16)}`;
+            }
+            updatePeersList();
+            updatePostsFeed();
+        }
+
+        function updatePeersList() {
+            elements.peerCount.textContent = peers.length;
+            
+            if (peers.length === 0) {
+                elements.peersList.innerHTML = '<p class="empty-state">Recherche de pairs...</p>';
+                return;
+            }
+            
+            elements.peersList.innerHTML = peers.map(peer => `
+                <div class="peer-item ${peer.is_browser ? 'browser-peer' : 'native-peer'}">
+                    <span class="peer-icon">${peer.is_browser ? '🌐' : '💻'}</span>
+                    <div class="peer-info">
+                        <span class="peer-name">${escapeHtml(peer.name || 'Anonyme')}</span>
+                        <span class="peer-id">${peer.peer_id.substring(0, 16)}...</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updatePostsFeed() {
+            elements.postCountBadge.textContent = posts.length;
+            
+            if (posts.length === 0) {
+                elements.postsFeed.innerHTML = '<p class="empty-state">Aucun message. Soyez le premier !</p>';
+                return;
+            }
+            
+            elements.postsFeed.innerHTML = posts.map(post => {
+                const date = new Date(post.timestamp * 1000);
+                const timeAgo = getTimeAgo(date);
+                const isLocal = post.author === myPeerId;
+                
+                return `
+                    <div class="post ${isLocal ? 'post-local' : ''}">
+                        <div class="post-header">
+                            <span class="post-author">${escapeHtml(post.author_name)}</span>
+                            <span class="post-time">${timeAgo}</span>
+                        </div>
+                        <div class="post-content">${escapeHtml(post.content)}</div>
+                        <div class="post-footer">
+                            <span>${isLocal ? '📍 Vous' : `🔗 ${post.author.substring(0, 12)}...`}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateConnectionStatus(status) {
+            elements.connectionIndicator.className = `status-indicator status-${status}`;
+            const texts = {
+                'connecting': '🔄 Connexion au relay...',
+                'connected': '✅ Connecté au réseau P2P',
+                'disconnected': '❌ Déconnecté',
+                'error': '⚠️ Erreur de connexion'
+            };
+            elements.connectionText.textContent = texts[status] || status;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            if (seconds < 60) return 'À l\'instant';
+            if (seconds < 3600) return `Il y a ${Math.floor(seconds / 60)} min`;
+            if (seconds < 86400) return `Il y a ${Math.floor(seconds / 3600)}h`;
+            return date.toLocaleDateString('fr-FR');
+        }
+
+        // Heartbeat
+        setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 30000);
+    </script>
+</body>
+</html>

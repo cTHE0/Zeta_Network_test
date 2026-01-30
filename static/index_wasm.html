@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeta Network - Réseau Social P2P Décentralisé</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌐 Zeta Network</h1>
+            <p class="subtitle">Réseau social décentralisé P2P - Code Rust exécuté dans votre navigateur</p>
+            <div class="connection-status">
+                <span id="connection-indicator" class="status-indicator status-disconnected"></span>
+                <span id="connection-text">Chargement...</span>
+            </div>
+        </header>
+
+        <!-- Écran de chargement WASM -->
+        <div id="loading-screen" class="loading-screen">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <h2>🔧 Initialisation du nœud P2P</h2>
+                <p id="loading-status">Chargement du code Rust (WebAssembly)...</p>
+                <div class="loading-steps">
+                    <div class="step" id="step-wasm">
+                        <span class="step-icon">⏳</span>
+                        <span>Chargement WASM</span>
+                    </div>
+                    <div class="step" id="step-keypair">
+                        <span class="step-icon">⏳</span>
+                        <span>Génération/Chargement de la clé</span>
+                    </div>
+                    <div class="step" id="step-connect">
+                        <span class="step-icon">⏳</span>
+                        <span>Connexion au réseau P2P</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content" id="main-content" style="display: none;">
+            <!-- Section d'information -->
+            <div class="info-section">
+                <div class="card">
+                    <h2>📊 Votre Nœud P2P</h2>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <span class="label">Peer ID:</span>
+                            <span class="value monospace" id="local-peer-id">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Nom:</span>
+                            <span class="value" id="local-name">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Mode:</span>
+                            <span class="value" id="node-mode">
+                                <span class="badge badge-wasm">🌐 WASM/WebRTC</span>
+                            </span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Pairs connectés:</span>
+                            <span class="value" id="peer-count">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Liste des pairs -->
+                <div class="card">
+                    <h2>👥 Pairs Connectés</h2>
+                    <div id="peers-list" class="peers-list">
+                        <p class="empty-state">Connexion en cours...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section principale -->
+            <div class="posts-section">
+                <!-- Formulaire de post -->
+                <div class="card post-form">
+                    <h2>✍️ Nouveau Post</h2>
+                    <form id="post-form">
+                        <div class="form-group">
+                            <input 
+                                type="text" 
+                                id="author" 
+                                placeholder="Votre nom" 
+                                required
+                                maxlength="50"
+                            >
+                        </div>
+                        <div class="form-group">
+                            <textarea 
+                                id="content" 
+                                placeholder="Qu'est-ce qui se passe ?" 
+                                required
+                                maxlength="280"
+                                rows="3"
+                            ></textarea>
+                            <div class="char-count">
+                                <span id="char-count">0</span>/280
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary" id="submit-btn">
+                            📤 Publier sur le réseau P2P
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Fil d'actualité -->
+                <div class="card">
+                    <h2>📰 Fil d'Actualité <span id="post-count-badge" class="badge">0</span></h2>
+                    <div id="posts-feed" class="posts-feed">
+                        <p class="empty-state">Aucun post pour le moment. Soyez le premier !</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>🦀 Code Rust exécuté localement via WebAssembly | 🔗 Connexion P2P via WebRTC | Powered by libp2p</p>
+        </footer>
+    </div>
+
+    <!-- Charger le module WASM -->
+    <script type="module" src="app_wasm.js"></script>
+</body>
+</html>
